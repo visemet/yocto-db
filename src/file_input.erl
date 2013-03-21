@@ -71,14 +71,28 @@ post_init(State = #state{poke_freq = PokeFreq}) ->
     )
 .
 
-open(Filename) ->
-    file:open(Filename, [read])
-.
+open(Filename) -> file:open(Filename, [read]).
 
 read(IoDevice, BatchSize) ->
     io:format("Reading file...~n")
 .
 
-send(Data) ->
-    gen_event:notify(erlang:self(), {data, Data})
+read(IoDevice, 0, Result) when is_list(Result) ->
+    lists:reverse(Result)
+;
+
+read(IoDevice, BatchSize, Result)
+  when
+    is_integer(BatchSize), BatchSize > 0
+  , is_list(Result)
+  ->
+    read(
+        IoDevice
+      , BatchSize - 1
+      , [process(io:read(IoDevice, '')) | Result]
+    )
 .
+
+process(Data) -> Data.
+
+send(Data) -> gen_event:notify(erlang:self(), {data, Data}).
