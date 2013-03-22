@@ -15,6 +15,10 @@
     {ok, State :: term()}
   | {error, Reason :: term()}.
 
+-callback delegate(Message :: term(), State :: term()) ->
+    {ok, NewState :: term()}
+  | {error, Reason :: term()}.
+
 %% ----------------------------------------------------------------- %%
 
 -type schema() :: [{atom(), {pos_integer(), atom()}}].
@@ -127,11 +131,38 @@ handle_cast(
     end
 ;
 
+handle_cast(
+    {delegate, Message}
+  , State = #plan_node{type = Type, wrapped = Wrapped}
+) ->
+    {ok, NewWrapped} = Type:delegate(Message, Wrapped)
+
+  , {noreply, State#plan_node{wrapped=NewWrapped}}
+;
+
 handle_cast(_Request, State) ->
     {noreply, State}
 .
 
-handle_info(_Info, State) -> {noreply, State}.
+handle_info(
+    {'DOWN', Ref, process, Subscriber, _Reason}
+  , State = #plan_node{listeners = Listeners}
+) when
+    is_reference(Ref)
+  , is_pid(Subscriber)
+  ->
+    % Remove `Subscriber' from the set of listeners
+    NewListeners = sets:del_element({Subscriber, Ref}, Listeners)
+
+    % Unmonitor `Subscriber'
+  , erlang:demonitor(Ref, [flush])
+
+  , {noreply, State#plan_node{listeners=NewListeners}}
+;
+
+handle_info(_Info, State) ->
+    {noreply, State}
+.
 
 terminate(_Reason, _State) -> ok.
 
