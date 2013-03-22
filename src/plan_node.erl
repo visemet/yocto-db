@@ -52,10 +52,12 @@ remove_listener(PlanNode, Subscriber)
 %% ----------------------------------------------------------------- %%
 
 init([Type, Schema, Options]) ->
-    State = #plan_node{
+    {ok, Wrapped} = Type:init(Options)
+
+  , State = #plan_node{
         type=Type
       , schema=Schema
-      , wrapped=Type:init(Options)
+      , wrapped=Wrapped
     }
 
   , {ok, State}
