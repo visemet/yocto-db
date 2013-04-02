@@ -1,9 +1,12 @@
 -module(ydb_plan_node).
 -behaviour(gen_server).
 
--export([start/4, notify/2, add_listener/2, remove_listener/2]).
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+-export([start_link/3, notify/2, add_listener/2, remove_listener/2]).
+
+-export([
+    init/1, handle_call/3, handle_cast/2, handle_info/2
+  , terminate/2, code_change/3
+]).
 
 -record(plan_node, {type, schema, listeners=sets:new(), wrapped}).
 
@@ -21,12 +24,8 @@
 
 %% ----------------------------------------------------------------- %%
 
--type schema() :: [{atom(), {pos_integer(), atom()}}].
-
-%% ----------------------------------------------------------------- %%
-
-start(Name, Type, Schema, Options) ->
-    gen_server:start({local, Name}, ?MODULE, [Type, Schema, Options], [])
+start_link(Type, Schema, Options) ->
+    gen_server:start_link(?MODULE, [Type, Schema, Options], [])
 .
 
 notify(PlanNode, Message) when is_pid(PlanNode) ->
@@ -52,7 +51,9 @@ remove_listener(PlanNode, Subscriber)
 %% ----------------------------------------------------------------- %%
 
 init([Type, Schema, Options]) ->
-    {ok, Wrapped} = Type:init(Options)
+    erlang:process_flag(trap_exit, true)
+
+  , {ok, Wrapped} = Type:init(Options)
 
   , State = #plan_node{
         type=Type
