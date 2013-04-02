@@ -1,5 +1,5 @@
--module(file_input).
--behaviour(plan_node).
+-module(ydb_file_input).
+-behaviour(ydb_plan_node).
 
 -export([start/3]).
 -export([init/1, delegate/2]).
@@ -11,7 +11,7 @@
 %%% =============================================================== %%%
 
 start(Name, Schema, Options) ->
-    plan_node:start(Name, ?MODULE, Schema, Options)
+    ydb_plan_node:start(Name, ?MODULE, Schema, Options)
 .
 
 %% ----------------------------------------------------------------- %%
@@ -46,7 +46,7 @@ delegate(
 ) ->
     case read(IoDevice, BatchSize) of
         {continue, Data} ->
-            plan_node:notify(
+            ydb_plan_node:notify(
                 erlang:self()
               , {'$gen_cast', {delegate, {data, Data}}}
             )
@@ -56,7 +56,7 @@ delegate(
           , {ok, State}
 
       ; {done, Data} ->
-            plan_node:notify(
+            ydb_plan_node:notify(
                 erlang:self()
               , {'$gen_cast', {delegate, {data, Data}}}
             )

@@ -1,4 +1,4 @@
--module(plan_node).
+-module(ydb_plan_node).
 -behaviour(gen_server).
 
 -export([start/4, notify/2, add_listener/2, remove_listener/2]).

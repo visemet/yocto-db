@@ -1,5 +1,5 @@
--module(socket_input).
--behaviour(plan_node).
+-module(ydb_socket_input).
+-behaviour(ydb_plan_node).
 
 -export([start/3]).
 -export([init/1, delegate/2]).
@@ -11,7 +11,7 @@
 %%% =============================================================== %%%
 
 start(Name, Schema, Options) ->
-    plan_node:start(Name, ?MODULE, Schema, Options)
+    ydb_plan_node:start(Name, ?MODULE, Schema, Options)
 .
 
 %% ----------------------------------------------------------------- %%
