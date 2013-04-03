@@ -18,24 +18,6 @@ start(Name, Schema, Options) ->
 
 init(Options) when is_list(Options) -> init(Options, #file_input{}).
 
-init([], State = #file_input{}) ->
-    post_init()
-
-  , {ok, State}
-;
-
-init([{filename, Filename} | Options], State = #file_input{}) ->
-    init(Options, State#file_input{io_device=open(Filename)})
-;
-
-init([{batch_size, BatchSize} | Options], State = #file_input{}) ->
-    init(Options, State#file_input{batch_size=BatchSize})
-;
-
-init([{poke_freq, PollFreq} | Options], State = #file_input{}) ->
-    init(Options, State#file_input{poke_freq=PollFreq})
-.
-
 delegate(
     Request = {read}
   , State = #file_input{
@@ -79,12 +61,40 @@ delegate(_Request, State) ->
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
+init([], State = #file_input{}) ->
+    post_init()
+
+  , {ok, State}
+;
+
+init([{filename, Filename} | Options], State = #file_input{}) ->
+    init(Options, State#file_input{io_device=open(Filename)})
+;
+
+init([{batch_size, BatchSize} | Options], State = #file_input{}) ->
+    init(Options, State#file_input{batch_size=BatchSize})
+;
+
+init([{poke_freq, PollFreq} | Options], State = #file_input{}) ->
+    init(Options, State#file_input{poke_freq=PollFreq})
+;
+
+init([Term | _Options], #file_input{}) ->
+    {error, {badarg, Term}}
+.
+
+%% ----------------------------------------------------------------- %%
+
 post_init() -> gen_server:cast(erlang:self(), {delegate, {read}}).
+
+%% ----------------------------------------------------------------- %%
 
 open(Filename) ->
     {ok, IoDevice} = file:open(Filename, [read])
   , IoDevice
 .
+
+%% ----------------------------------------------------------------- %%
 
 read(IoDevice, BatchSize) ->
     read(IoDevice, BatchSize, [])
