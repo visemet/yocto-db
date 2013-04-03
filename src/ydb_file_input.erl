@@ -1,7 +1,7 @@
 -module(ydb_file_input).
 -behaviour(ydb_plan_node).
 
--export([start/3]).
+-export([start_link/2]).
 -export([init/1, delegate/2]).
 
 -record(file_input, {io_device, batch_size, poke_freq}).
@@ -10,13 +10,13 @@
 %%%  API                                                            %%%
 %%% =============================================================== %%%
 
-start(Name, Schema, Options) ->
-    ydb_plan_node:start(Name, ?MODULE, Schema, Options)
+start_link(Args, Options) ->
+    ydb_plan_node:start_link(?MODULE, Args, Options)
 .
 
 %% ----------------------------------------------------------------- %%
 
-init(Options) when is_list(Options) -> init(Options, #file_input{}).
+init(Args) when is_list(Args) -> init(Args, #file_input{}).
 
 delegate(
     Request = {read}
@@ -67,19 +67,19 @@ init([], State = #file_input{}) ->
   , {ok, State}
 ;
 
-init([{filename, Filename} | Options], State = #file_input{}) ->
-    init(Options, State#file_input{io_device=open(Filename)})
+init([{filename, Filename} | Args], State = #file_input{}) ->
+    init(Args, State#file_input{io_device=open(Filename)})
 ;
 
-init([{batch_size, BatchSize} | Options], State = #file_input{}) ->
-    init(Options, State#file_input{batch_size=BatchSize})
+init([{batch_size, BatchSize} | Args], State = #file_input{}) ->
+    init(Args, State#file_input{batch_size=BatchSize})
 ;
 
-init([{poke_freq, PollFreq} | Options], State = #file_input{}) ->
-    init(Options, State#file_input{poke_freq=PollFreq})
+init([{poke_freq, PollFreq} | Args], State = #file_input{}) ->
+    init(Args, State#file_input{poke_freq=PollFreq})
 ;
 
-init([Term | _Options], #file_input{}) ->
+init([Term | _Args], #file_input{}) ->
     {error, {badarg, Term}}
 .
 

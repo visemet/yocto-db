@@ -1,7 +1,7 @@
 -module(ydb_socket_input).
 -behaviour(ydb_plan_node).
 
--export([start/3]).
+-export([start_link/2]).
 -export([init/1, delegate/2]).
 
 -record(socket_input, {port_no}).
@@ -10,23 +10,13 @@
 %%%  API                                                            %%%
 %%% =============================================================== %%%
 
-start(Name, Schema, Options) ->
-    ydb_plan_node:start(Name, ?MODULE, Schema, Options)
+start_link(Args, Options) ->
+    ydb_plan_node:start_link(?MODULE, Args, Options)
 .
 
 %% ----------------------------------------------------------------- %%
 
-init(Options) when is_list(Options) -> init(Options, #socket_input{}).
-
-init([], State = #socket_input{}) ->
-    post_init(State)
-
-  , {ok, State}
-;
-
-init([Term | _Options], #socket_input{}) ->
-    {error, {badarg, Term}}
-.
+init(Args) when is_list(Args) -> init(Args, #socket_input{}).
 
 delegate(_Request, State) ->
     {ok, State}
@@ -35,6 +25,18 @@ delegate(_Request, State) ->
 %%% =============================================================== %%%
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
+
+init([], State = #socket_input{}) ->
+    post_init(State)
+
+  , {ok, State}
+;
+
+init([Term | _Args], #socket_input{}) ->
+    {error, {badarg, Term}}
+.
+
+%% ----------------------------------------------------------------- %%
 
 post_init(#socket_input{}) ->
     pass
