@@ -1,6 +1,6 @@
 -module(ydb_input_node).
 
--export([make_tuple/3]).
+-export([make_tuple/3, push/1]).
 
 -include("ydb_plan_node.hrl").
 
@@ -27,6 +27,15 @@ make_tuple({Unit, Name}, Schema, Data)
   , Timestamp = convert_time({Unit, erlang:element(Index, Data)})
 
   , new_tuple(Timestamp, Data)
+.
+
+%% ----------------------------------------------------------------- %%
+
+push(Tuple = #ydb_tuple{}) ->
+    ydb_plan_node:notify(
+        erlang:self()
+      , {'$gen_cast', {delegate, {tuple, Tuple}}}
+    )
 .
 
 %%% =============================================================== %%%
