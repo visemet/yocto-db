@@ -2,7 +2,7 @@
 -behaviour(ydb_plan_node).
 
 -export([start_link/2]).
--export([init/1, delegate/2]).
+-export([init/1, delegate/2, delegate/3]).
 
 -record(file_input, {io_device, batch_size, poke_freq}).
 
@@ -18,6 +18,19 @@ start_link(Args, Options) ->
 
 init(Args) when is_list(Args) -> init(Args, #file_input{}).
 
+delegate(Request = {read}, State = #file_input{}) ->
+    ydb_plan_node:notify(
+        erlang:self()
+      , {'$gen_cast', {delegate, Request, [schema, timestamp]}}
+    )
+
+  , {ok, State}
+;
+
+delegate(_Request, State) ->
+    {ok, State}
+.
+
 delegate(
     Request = {read}
   , State = #file_input{
@@ -25,12 +38,13 @@ delegate(
       , batch_size = BatchSize
       , poke_freq = PokeFreq
     }
+
+  , _Extras = [Schema, Timestamp]
 ) ->
     case read(IoDevice, BatchSize) of
         {continue, Data} ->
-            ydb_plan_node:notify(
-                erlang:self()
-              , {'$gen_cast', {delegate, {data, Data}}}
+            ydb_input_node_utils:push(
+                ydb_input_node_utils:make_tuple(Timestamp, Schema, Data)
             )
 
           , timer:send_after(PokeFreq, {'$gen_cast', {delegate, Request}})
@@ -38,9 +52,8 @@ delegate(
           , {ok, State}
 
       ; {done, Data} ->
-            ydb_plan_node:notify(
-                erlang:self()
-              , {'$gen_cast', {delegate, {data, Data}}}
+            ydb_input_node_utils:push(
+                ydb_input_node_utils:make_tuple(Timestamp, Schema, Data)
             )
 
           , file:close(IoDevice)
@@ -53,7 +66,7 @@ delegate(
     end
 ;
 
-delegate(_Request, State) ->
+delegate(_Request, State, _Extras) ->
     {ok, State}
 .
 
