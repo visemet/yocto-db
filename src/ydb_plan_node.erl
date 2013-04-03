@@ -13,7 +13,7 @@
 -record(plan_node, {
     type :: atom()
 
-  , schema :: ydb_schema()
+  , schema=[] :: ydb_schema()
   , timestamp='$auto_timestamp' :: '$auto_timestamp' | atom()
 
   , wrapped :: term()
@@ -35,8 +35,8 @@
 
 %% ----------------------------------------------------------------- %%
 
-start_link(Type, Schema, Options) ->
-    gen_server:start_link(?MODULE, [Type, Schema, Options], [])
+start_link(Type, Args, Options) ->
+    gen_server:start_link(?MODULE, [Type, Args, Options], [])
 .
 
 notify(PlanNode, Message) when is_pid(PlanNode) ->
@@ -61,19 +61,24 @@ remove_listener(PlanNode, Subscriber)
 
 %% ----------------------------------------------------------------- %%
 
-init([Type, Schema, Options]) ->
+init([Type, Args, Options]) ->
     erlang:process_flag(trap_exit, true)
 
-  , {ok, Wrapped} = Type:init(Options)
+  , case Type:init(Args) of
+        {ok, Wrapped} ->
+            State = #plan_node{
+                type=Type
+              , wrapped=Wrapped
+            }
 
-  , State = #plan_node{
-        type=Type
-      , schema=Schema
-      , wrapped=Wrapped
-    }
+          , init(Options, State)
 
-  , {ok, State}
+      ; {error, Reason} ->
+            {error, Reason}
+    end
 .
+
+%% ----------------------------------------------------------------- %%
 
 handle_call(
     {subscribe, Subscriber}
@@ -103,6 +108,8 @@ handle_call(
 handle_call(_Request, _From, State) ->
     {reply, ok, State}
 .
+
+%% ----------------------------------------------------------------- %%
 
 handle_cast(
     {notify, Message}
@@ -158,6 +165,8 @@ handle_cast(_Request, State) ->
     {noreply, State}
 .
 
+%% ----------------------------------------------------------------- %%
+
 handle_info(
     {'DOWN', Ref, process, Subscriber, _Reason}
   , State = #plan_node{listeners = Listeners}
@@ -178,6 +187,8 @@ handle_info(_Info, State) ->
     {noreply, State}
 .
 
+%% ----------------------------------------------------------------- %%
+
 terminate(_Reason, _State) -> ok.
 
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
@@ -185,6 +196,20 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %%% =============================================================== %%%
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
+
+init([], State = #plan_node{}) ->
+    {ok, State}
+;
+
+init([{schema, Schema} | Options], State = #plan_node{}) ->
+    init(Options, State#plan_node{schema=Schema})
+;
+
+init([Term | _Options], #plan_node{}) ->
+    {error, {badarg, Term}}
+.
+
+%% ----------------------------------------------------------------- %%
 
 get_ref(Subscriber, Listeners)
   when
