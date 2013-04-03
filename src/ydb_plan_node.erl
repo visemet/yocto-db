@@ -14,7 +14,7 @@
     type :: atom()
 
   , schema=[] :: ydb_schema()
-  , timestamp='$auto_timestamp' :: '$auto_timestamp' | atom()
+  , timestamp='$auto_timestamp' :: '$auto_timestamp' | {atom(), atom()}
 
   , wrapped :: term()
 
@@ -201,8 +201,20 @@ init([], State = #plan_node{}) ->
     {ok, State}
 ;
 
-init([{schema, Schema} | Options], State = #plan_node{}) ->
+init([{schema, Schema} | Options], State = #plan_node{})
+  when
+    is_list(Options)
+  ->
     init(Options, State#plan_node{schema=Schema})
+;
+
+init([Timestamp = {Unit, Name} | Options], State = #plan_node{})
+  when
+    is_atom(Unit)
+  , is_atom(Name)
+  , is_list(Options)
+  ->
+    init(Options, State#plan_node{timestamp=Timestamp})
 ;
 
 init([Term | _Options], #plan_node{}) ->
