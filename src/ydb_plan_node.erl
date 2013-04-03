@@ -27,11 +27,22 @@
 
 -callback init(Options :: term()) ->
     {ok, State :: term()}
-  | {error, Reason :: term()}.
+  | {error, Reason :: term()}
+.
 
 -callback delegate(Message :: term(), State :: term()) ->
     {ok, NewState :: term()}
-  | {error, Reason :: term()}.
+  | {error, Reason :: term()}
+.
+
+-callback delegate(
+    Message :: term()
+  , State :: term()
+  , Extras :: [atom()])
+  ->
+    {ok, NewState :: term()}
+  | {error, Reason :: term()}
+.
 
 %% ----------------------------------------------------------------- %%
 
@@ -157,6 +168,34 @@ handle_cast(
   , State = #plan_node{type = Type, wrapped = Wrapped}
 ) ->
     {ok, NewWrapped} = Type:delegate(Message, Wrapped)
+
+  , {noreply, State#plan_node{wrapped=NewWrapped}}
+;
+
+handle_cast(
+    {delegate, Message, Extras}
+  , State = #plan_node{
+        type = Type
+      , schema = Schema
+      , timestamp = Timestamp
+      , wrapped = Wrapped
+    }
+) when
+    is_list(Extras)
+  ->
+    {ok, NewWrapped} = Type:delegate(
+        Message
+      , Wrapped
+      , lists:map(
+            fun
+                (schema) -> Schema
+
+              ; (timestamp) -> Timestamp
+            end
+
+          , Extras
+        )
+    )
 
   , {noreply, State#plan_node{wrapped=NewWrapped}}
 ;
