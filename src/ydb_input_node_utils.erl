@@ -1,4 +1,4 @@
--module(ydb_input_node).
+-module(ydb_input_node_utils).
 
 -export([make_tuple/3, push/1]).
 
