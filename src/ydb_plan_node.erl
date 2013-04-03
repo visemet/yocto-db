@@ -1,3 +1,6 @@
+% @author Max Hirschhorn
+%
+% @doc This module? TODO This implements the gen_server behaviour.
 -module(ydb_plan_node).
 -behaviour(gen_server).
 
@@ -45,6 +48,7 @@
 .
 
 %% ----------------------------------------------------------------- %%
+
 
 start_link(Type, Args, Options) ->
     gen_server:start_link(?MODULE, [Type, Args, Options], [])
@@ -262,6 +266,10 @@ init([Term | _Options], #plan_node{}) ->
 
 %% ----------------------------------------------------------------- %%
 
+% ---------------------------------------------------------------------
+% @doc ?
+%
+% @spec 
 get_ref(Subscriber, Listeners)
   when
     is_pid(Subscriber)

@@ -1,10 +1,15 @@
+% @author Max Hirschhorn
+%
+% @doc This module contains utility functions used for inputting tuples.
 -module(ydb_input_node_utils).
 
 -export([make_tuple/3, push/1]).
 
 -include("ydb_plan_node.hrl").
 
+% Number of seconds in a megasecond.
 -define(MegaSecs_To_Secs, 1000000).
+% Number of microseconds in a second.
 -define(Secs_To_MicroSecs, 1000000).
 
 %%% =============================================================== %%%
