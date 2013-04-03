@@ -8,7 +8,18 @@
   , terminate/2, code_change/3
 ]).
 
--record(plan_node, {type, schema, listeners=sets:new(), wrapped}).
+-include("ydb_plan_node.hrl").
+
+-record(plan_node, {
+    type :: atom()
+
+  , schema :: ydb_schema()
+  , timestamp='$auto_timestamp' :: '$auto_timestamp' | atom()
+
+  , wrapped :: term()
+
+  , listeners=sets:new() :: set()
+}).
 
 %%% =============================================================== %%%
 %%%  API                                                            %%%
