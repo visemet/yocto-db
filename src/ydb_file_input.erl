@@ -44,7 +44,7 @@ delegate(
     case read(IoDevice, BatchSize) of
         {continue, Data} ->
             ydb_input_node_utils:push(
-                ydb_input_node_utils:make_tuple(Timestamp, Schema, Data)
+                ydb_input_node_utils:make_tuples(Timestamp, Schema, Data)
             )
 
           , timer:send_after(PokeFreq, {'$gen_cast', {delegate, Request}})
@@ -53,7 +53,7 @@ delegate(
 
       ; {done, Data} ->
             ydb_input_node_utils:push(
-                ydb_input_node_utils:make_tuple(Timestamp, Schema, Data)
+                ydb_input_node_utils:make_tuples(Timestamp, Schema, Data)
             )
 
           , file:close(IoDevice)
