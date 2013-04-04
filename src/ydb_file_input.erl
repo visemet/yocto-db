@@ -19,9 +19,9 @@ start_link(Args, Options) ->
 init(Args) when is_list(Args) -> init(Args, #file_input{}).
 
 delegate(Request = {read}, State = #file_input{}) ->
-    ydb_plan_node:notify(
+    gen_server:cast(
         erlang:self()
-      , {'$gen_cast', {delegate, Request, [schema, timestamp]}}
+      , {delegate, Request, [schema, timestamp]}
     )
 
   , {ok, State}
