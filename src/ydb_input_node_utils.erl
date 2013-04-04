@@ -40,7 +40,7 @@ make_tuple({Unit, Name}, Schema, Data)
   , is_list(Schema)
   , is_tuple(Data)
   ->
-    {Index, _Type} = dict:find(Name, dict:from_list(Schema))
+    {Index, _Type} = dict:fetch(Name, dict:from_list(Schema))
   , Timestamp = convert_time({Unit, erlang:element(Index, Data)})
 
   , new_tuple(Timestamp, Data)
