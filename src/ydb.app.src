@@ -1,0 +1,18 @@
+{application, ydb, [
+    {description, "A data-stream management system"}
+  , {vsn, "1"}
+  , {modules, [
+        ydb_plan_node
+      , ydb_file_input
+      , ydb_socket_input
+    ]}
+
+  , {registered, []}
+  , {applications, [
+        kernel
+      , stdlib
+    ]}
+
+  , {mod, { ydb_app, []}}
+  , {env, []}
+]}.
