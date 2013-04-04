@@ -101,9 +101,8 @@ handle_call(
   , State = #plan_node{listeners = Listeners}
 ) when
     is_pid(Subscriber)
-  , is_list(Listeners)
   ->
-    case get_ref(Subscriber, Listeners) of
+    case get_ref(Subscriber, sets:to_list(Listeners)) of
         % `Subscriber' is not already a listener
         undefined ->
             % Monitor `Subscriber'
@@ -129,15 +128,13 @@ handle_call(_Request, _From, State) ->
 handle_cast(
     {notify, Message}
   , State = #plan_node{listeners = Listeners}
-) when
-    is_list(Listeners)
-  ->
+) ->
     lists:foreach(
         fun (Subscriber) when is_pid(Subscriber) ->
             Subscriber ! Message
         end
 
-      , Listeners
+      , sets:to_list(Listeners)
     )
 
   , {noreply, State}
@@ -148,9 +145,8 @@ handle_cast(
   , State = #plan_node{listeners = Listeners}
 ) when
     is_pid(Subscriber)
-  , is_list(Listeners)
   ->
-    case get_ref(Subscriber, Listeners) of
+    case get_ref(Subscriber, sets:to_list(Listeners)) of
         % `Subscriber' is not a listener
         undefined ->
             {noreply, State}
@@ -275,7 +271,7 @@ get_ref(Subscriber, Listeners)
     is_pid(Subscriber)
   , is_list(Listeners)
   ->
-    sets:foldl(
+    lists:foldl(
         fun
             ({Pid, Ref}, undefined)
               when
@@ -289,6 +285,7 @@ get_ref(Subscriber, Listeners)
           ; (_Item, Ref) when is_reference(Ref) -> Ref
         end
 
+      , undefined
       , Listeners
     )
 .
