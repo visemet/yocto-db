@@ -43,7 +43,7 @@ make_tuples(Timestamp, Schema, Data) when is_list(Data) ->
   , Schema :: list()
   , Data :: tuple()
 ) ->
-    Tuple :: ydb_tuple()
+    Tuple :: #ydb_tuple{}
 .
 
 %% @doc Makes a new tuple with a timestamp if not given.
@@ -67,7 +67,7 @@ make_tuple({Unit, Name}, Schema, Data)
 
 %% ----------------------------------------------------------------- %%
 
--spec push(Tuple :: ydb_tuple()) -> ok.
+-spec push(Tuple :: #ydb_tuple{}) -> ok.
 
 %% @doc TODO
 push(Tuple = #ydb_tuple{}) ->
@@ -89,7 +89,7 @@ push(Tuples) when is_list(Tuples) ->
 %%% =============================================================== %%%
 
 -spec new_tuple(Timestamp :: integer(), Data :: tuple()) ->
-    Tuple :: ydb_tuple()
+    Tuple :: #ydb_tuple{}
 .
 
 %% @doc Creates a new tuple.

@@ -1,23 +1,49 @@
+%% @author Max Hirschhorn <maxh@caltech.edu>
+
+%% @doc Module containing functions used for reading tuples from files.
+%%      Creates tuples from data within the files.
 -module(ydb_file_input).
 -behaviour(ydb_plan_node).
 
 -export([start_link/2]).
 -export([init/1, delegate/2, delegate/3]).
 
--record(file_input, {io_device, batch_size, poke_freq}).
+-record(file_input, {
+    io_device :: file:io_device()
+  , batch_size :: integer()
+  , poke_freq :: integer()
+}).
 
 %%% =============================================================== %%%
 %%%  API                                                            %%%
 %%% =============================================================== %%%
 
+-spec start_link(Args :: list(), Options :: list()) ->
+    {ok, Pid :: pid()}
+  | ignore
+  | {error, Error :: term()}
+.
+
+%% @doc TODO
 start_link(Args, Options) ->
     ydb_plan_node:start_link(?MODULE, Args, Options)
 .
 
 %% ----------------------------------------------------------------- %%
 
+-spec init(Args :: list()) ->
+    {ok, State :: #file_input{}}
+  | {error, {badarg, Term :: term}}
+.
+
+%% @doc TODO
 init(Args) when is_list(Args) -> init(Args, #file_input{}).
 
+-spec delegate(Request :: atom(), State :: #file_input{}) ->
+    {ok, State :: #file_input{}}
+.
+
+%% @doc TODO
 delegate(Request = {read}, State = #file_input{}) ->
     gen_server:cast(
         erlang:self()
@@ -74,6 +100,12 @@ delegate(_Request, State, _Extras) ->
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
+-spec init(list(), State :: #file_input{}) ->
+    {ok, State :: #file_input{}}
+  | {error, {badarg, Term :: term()}}
+.
+
+%% @doc TODO
 init([], State = #file_input{}) ->
     post_init()
 
@@ -98,10 +130,17 @@ init([Term | _Args], #file_input{}) ->
 
 %% ----------------------------------------------------------------- %%
 
+-spec post_init() -> ok.
+
+%% @doc TODO
 post_init() -> gen_server:cast(erlang:self(), {delegate, {read}}).
 
 %% ----------------------------------------------------------------- %%
 
+-spec open(Filename :: file:name_all() | iodata()) ->
+    IoDevice :: file:io_device().
+
+%% @doc Opens a particular file and returns the IO device.
 open(Filename) ->
     {ok, IoDevice} = file:open(Filename, [read])
   , IoDevice
@@ -109,10 +148,26 @@ open(Filename) ->
 
 %% ----------------------------------------------------------------- %%
 
+-spec read(IoDevice :: file:io_device(), BatchSize :: integer()) ->
+    {done, Result :: list()}
+  | {continue, Result :: list()}
+.
+
+%% @doc Reads from an IO device with a particular batch size.
 read(IoDevice, BatchSize) ->
     read(IoDevice, BatchSize, [])
 .
 
+-spec read(
+    IoDevice :: file:io_device()
+  , BatchSize :: integer()
+  , Result :: list()) ->
+    {done, Result :: list()}
+  | {continue, Result :: list()}
+.
+
+%% @doc Reads from an IO device with a particular batch size and list
+%%      of results. TODO
 read(_IoDevice, -1, Result) when is_list(Result) ->
     {done, lists:reverse(Result)}
 ;
