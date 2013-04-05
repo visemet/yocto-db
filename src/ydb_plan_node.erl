@@ -1,6 +1,8 @@
-% @author Max Hirschhorn
-%
-% @doc This module? TODO This implements the gen_server behaviour.
+%% @author Max Hirschhorn <maxh@caltech.edu>
+
+%% @doc A generic plan node. Several listeners (processes) can be
+%%      added and will be notified for every tuple computed by the
+%%      plan node.
 -module(ydb_plan_node).
 -behaviour(gen_server).
 
@@ -49,15 +51,26 @@
 
 %% ----------------------------------------------------------------- %%
 
-
-start_link(Type, Args, Options) ->
-    gen_server:start_link(?MODULE, [Type, Args, Options], [])
+-spec start_link(atom(), term(), list()) ->
+    {ok, pid()}
+  | {error, term()}
 .
 
+%% @doc Starts the plan node in the supervisor hierarchy.
+start_link(Type, Args, Options) ->
+    gen_server:start_link(?MODULE, {Type, Args, Options}, [])
+.
+
+-spec notify(pid(), term()) -> ok.
+
+%% @doc Notifies the listeners of the plan node with the message.
 notify(PlanNode, Message) when is_pid(PlanNode) ->
     gen_server:cast(PlanNode, {notify, Message})
 .
 
+-spec add_listener(pid(), pid()) -> ok | {error, already_subscribed}.
+
+%% @doc Adds the subscriber as a listener to the plan node.
 add_listener(PlanNode, Subscriber)
   when
     is_pid(PlanNode)
@@ -66,6 +79,9 @@ add_listener(PlanNode, Subscriber)
     gen_server:call(PlanNode, {subscribe, Subscriber})
 .
 
+-spec remove_listener(pid(), pid()) -> ok.
+
+%% @doc Removes the subscriber as a listener from the plan node.
 remove_listener(PlanNode, Subscriber)
   when
     is_pid(PlanNode)
@@ -76,7 +92,13 @@ remove_listener(PlanNode, Subscriber)
 
 %% ----------------------------------------------------------------- %%
 
-init([Type, Args, Options]) ->
+-spec init(Args :: {atom(), term(), list()}) ->
+    {ok, #plan_node{}}
+  | {stop, term()}
+.
+
+%% @doc Initializes the internal state of the plan node.
+init({Type, Args, Options}) ->
     erlang:process_flag(trap_exit, true)
 
   , case Type:init(Args) of
@@ -89,12 +111,21 @@ init([Type, Args, Options]) ->
           , init(Options, State)
 
       ; {error, Reason} ->
-            {error, Reason}
+            {stop, Reason}
     end
 .
 
 %% ----------------------------------------------------------------- %%
 
+-spec handle_call(
+    Request :: term()
+  , From :: {pid(), Tag :: term()}
+  , State :: #plan_node{}
+) ->
+    {reply, Reply :: term(), NewState :: #plan_node{}}
+.
+
+%% @doc Handles the request to subscribe a listener.
 handle_call(
     {subscribe, Subscriber}
   , _From
@@ -125,6 +156,14 @@ handle_call(_Request, _From, State) ->
 
 %% ----------------------------------------------------------------- %%
 
+-spec handle_cast(Request :: term(), State :: #plan_node{}) ->
+    {noreply, NewState :: #plan_node{}}
+.
+
+%% @doc Handles the request to notify listeners of a message. Handles
+%%      the request to unsubscribe a listener. Delegates the message to
+%%      the specific type of plan node, possibly with additional
+%%      information of the state.
 handle_cast(
     {notify, Message}
   , State = #plan_node{listeners = Listeners}
@@ -206,6 +245,11 @@ handle_cast(_Request, State) ->
 
 %% ----------------------------------------------------------------- %%
 
+-spec handle_info(Info :: timeout | term(), State :: #plan_node{}) ->
+    {noreply, NewState :: #plan_node{}}
+.
+
+%% @doc Removes down subscribers as listeners.
 handle_info(
     {'DOWN', Ref, process, Subscriber, _Reason}
   , State = #plan_node{listeners = Listeners}
@@ -228,14 +272,37 @@ handle_info(_Info, State) ->
 
 %% ----------------------------------------------------------------- %%
 
+-spec terminate(Reason :: term(), State :: #plan_node{}) -> ok.
+
+%% @doc Called by a gen_server when it is about to terminate. Nothing
+%%      to clean up though.
 terminate(_Reason, _State) -> ok.
 
+-spec code_change(
+    OldVsn :: term()
+  , State :: #plan_node{}
+  , Extra :: term()
+) ->
+    {ok, NewState :: #plan_node{}}
+.
+
+%% @doc Called by a gen_server when it shoudl update its interal state
+%%      during a release upgrade or downgrade. Unsupported; the state
+%%      remains the same.
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 %%% =============================================================== %%%
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
+-spec init(Options :: list(), State :: #plan_node{}) ->
+    {ok, NewState :: #plan_node{}}
+  | {error, {badarg, term()}}
+.
+
+%% @doc Initializes the internal state of the plan node. Accepts the
+%%      schema, as well as the column name and unit of the timestamp
+%%      field.
 init([], State = #plan_node{}) ->
     {ok, State}
 ;
@@ -262,10 +329,12 @@ init([Term | _Options], #plan_node{}) ->
 
 %% ----------------------------------------------------------------- %%
 
-% ---------------------------------------------------------------------
-% @doc ?
-%
-% @spec 
+-spec get_ref(pid(), [{pid(), reference()}]) ->
+    'undefined'
+  | reference()
+.
+
+%% @doc Returns the listener reference associated with the subscriber.
 get_ref(Subscriber, Listeners)
   when
     is_pid(Subscriber)
