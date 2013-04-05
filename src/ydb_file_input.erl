@@ -47,9 +47,10 @@ init(Args) when is_list(Args) -> init(Args, #file_input{}).
 
 %% @doc TODO
 delegate(Request = {read}, State = #file_input{}) ->
-    gen_server:cast(
+    ydb_plan_node:relegate(
         erlang:self()
-      , {delegate, Request, [schema, timestamp]}
+      , Request
+      , [schema, timestamp]
     )
 
   , {ok, State}
@@ -84,7 +85,14 @@ delegate(
                 ydb_input_node_utils:make_tuples(Timestamp, Schema, Data)
             )
 
-          , timer:send_after(PokeFreq, {'$gen_cast', {delegate, Request}})
+          , io:format("data ~p~n", [Data])
+
+          , timer:apply_after(
+                PokeFreq
+              , ydb_plan_node
+              , relegate
+              , [erlang:self(), Request]
+            )
 
           , {ok, State}
 
@@ -144,7 +152,7 @@ init([Term | _Args], #file_input{}) ->
 -spec post_init() -> ok.
 
 %% @doc TODO
-post_init() -> gen_server:cast(erlang:self(), {delegate, {read}}).
+post_init() -> ydb_plan_node:relegate(erlang:self(), {read}).
 
 %% ----------------------------------------------------------------- %%
 
