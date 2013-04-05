@@ -1,6 +1,5 @@
-%% @author Kalpana Suraesh <TODO>
+%% @author Kalpana Suraesh <ksuraesh@caltech.edu>
 
-%%
 %% @doc This module reads input from a socket and pushes it to the
 %%      query planner.
 -module(ydb_socket_input).
@@ -52,6 +51,15 @@ delegate(_Request, State) ->
     {ok, State}
 .
 
+-spec delegate(
+    Request :: atom()
+  , State :: #socket_input{}
+  , Extras :: list()
+} ->
+    {ok, State}
+.
+
+%% @doc TODO
 delegate(
     Request = {listen}
   , State = #socket_input{socket=Socket}
@@ -76,6 +84,12 @@ delegate(_Request, State, _Extras) ->
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
+-spec init(list(), State :: #socket_input{}) ->
+    {ok, NewState :: #socket_input{}}
+  | {error, {badarg, Term :: term()}}
+.
+
+%% @doc TODO
 init([], State = #socket_input{}) ->
     NewState = post_init(State)
   , {ok, NewState}
@@ -91,6 +105,9 @@ init([Term | _Args], #socket_input{}) ->
 
 %% ----------------------------------------------------------------- %%
 
+-spec post_init(State :: #socket_input{}) -> State :: #socket_input{}.
+
+%% @doc TODO
 post_init(State = #socket_input{port_no = PortNo}) ->
     {ok, LSock} = gen_tcp:listen(PortNo, [{active, false}, binary])
   , {ok, ASock} = gen_tcp:accept(LSock)

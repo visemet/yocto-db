@@ -57,6 +57,15 @@ delegate(_Request, State) ->
     {ok, State}
 .
 
+-spec delegate(
+    Request :: atom()
+  , State :: #file_input{}
+  , Extras :: list()
+) ->
+    {ok, State :: #file_input{}}
+.
+
+%% @doc TODO
 delegate(
     Request = {read}
   , State = #file_input{

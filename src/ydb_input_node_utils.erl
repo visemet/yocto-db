@@ -1,5 +1,5 @@
 %% @author Max Hirschhorn <maxh@caltech.edu>
-%%
+
 %% @doc This module contains utility functions used for inputting
 %%      tuples.
 -module(ydb_input_node_utils).
