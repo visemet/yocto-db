@@ -6,7 +6,10 @@
 -module(ydb_plan_node).
 -behaviour(gen_server).
 
--export([start_link/3, notify/2, add_listener/2, remove_listener/2]).
+-export([
+    start_link/3, notify/2, add_listener/2, remove_listener/2
+  , relegate/2, relegate/3
+]).
 
 -export([
     init/1, handle_call/3, handle_cast/2, handle_info/2
@@ -88,6 +91,25 @@ remove_listener(PlanNode, Subscriber)
   , is_pid(Subscriber)
   ->
     gen_server:cast(PlanNode, {unsubscribe, Subscriber})
+.
+
+-spec relegate(pid(), term()) -> ok.
+
+%% @doc Processes the message with the specific type of plan node.
+relegate(PlanNode, Message) when is_pid(PlanNode) ->
+    gen_server:cast(PlanNode, {delegate, Message})
+.
+
+-spec relegate(pid(), term(), [atom()]) -> ok.
+
+%% @doc Process the message with the specific type of plan node,
+%%      including the additional state information.
+relegate(PlanNode, Message, Extras)
+  when
+    is_pid(PlanNode)
+  , is_list(Extras)
+  ->
+    gen_server:cast(PlanNode, {delegate, Message, Extras})
 .
 
 %% ----------------------------------------------------------------- %%
