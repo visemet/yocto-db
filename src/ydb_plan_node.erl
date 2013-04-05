@@ -97,7 +97,7 @@ remove_listener(PlanNode, Subscriber)
 
 %% @doc Processes the message with the specific type of plan node.
 relegate(PlanNode, Message) when is_pid(PlanNode) ->
-    gen_server:cast(PlanNode, {delegate, Message})
+    gen_server:cast(PlanNode, {relegate, Message})
 .
 
 -spec relegate(pid(), term(), [atom()]) -> ok.
@@ -109,7 +109,7 @@ relegate(PlanNode, Message, Extras)
     is_pid(PlanNode)
   , is_list(Extras)
   ->
-    gen_server:cast(PlanNode, {delegate, Message, Extras})
+    gen_server:cast(PlanNode, {relegate, Message, Extras})
 .
 
 %% ----------------------------------------------------------------- %%
@@ -225,7 +225,7 @@ handle_cast(
 ;
 
 handle_cast(
-    {delegate, Message}
+    {relegate, Message}
   , State = #plan_node{type = Type, wrapped = Wrapped}
 ) ->
     {ok, NewWrapped} = Type:delegate(Message, Wrapped)
@@ -234,7 +234,7 @@ handle_cast(
 ;
 
 handle_cast(
-    {delegate, Message, Extras}
+    {relegate, Message, Extras}
   , State = #plan_node{
         type = Type
       , schema = Schema
