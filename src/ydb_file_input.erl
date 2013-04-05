@@ -19,9 +19,9 @@ start_link(Args, Options) ->
 init(Args) when is_list(Args) -> init(Args, #file_input{}).
 
 delegate(Request = {read}, State = #file_input{}) ->
-    ydb_plan_node:notify(
+    gen_server:cast(
         erlang:self()
-      , {'$gen_cast', {delegate, Request, [schema, timestamp]}}
+      , {delegate, Request, [schema, timestamp]}
     )
 
   , {ok, State}
@@ -44,7 +44,7 @@ delegate(
     case read(IoDevice, BatchSize) of
         {continue, Data} ->
             ydb_input_node_utils:push(
-                ydb_input_node_utils:make_tuple(Timestamp, Schema, Data)
+                ydb_input_node_utils:make_tuples(Timestamp, Schema, Data)
             )
 
           , timer:send_after(PokeFreq, {'$gen_cast', {delegate, Request}})
@@ -53,7 +53,7 @@ delegate(
 
       ; {done, Data} ->
             ydb_input_node_utils:push(
-                ydb_input_node_utils:make_tuple(Timestamp, Schema, Data)
+                ydb_input_node_utils:make_tuples(Timestamp, Schema, Data)
             )
 
           , file:close(IoDevice)

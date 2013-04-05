@@ -3,7 +3,7 @@
 % @doc This module contains utility functions used for inputting tuples.
 -module(ydb_input_node_utils).
 
--export([make_tuple/3, push/1]).
+-export([make_tuples/3, make_tuple/3, push/1]).
 
 -include("ydb_plan_node.hrl").
 
@@ -15,6 +15,18 @@
 %%% =============================================================== %%%
 %%%  API                                                            %%%
 %%% =============================================================== %%%
+
+make_tuples(Timestamp, Schema, Data) when is_list(Data) ->
+    lists:map(
+        fun (Datum) when is_tuple(Datum) ->
+            make_tuple(Timestamp, Schema, Datum)
+        end
+
+      , Data
+    )
+.
+
+%% ----------------------------------------------------------------- %%
 
 make_tuple('$auto_timestamp', _Schema, Data) when is_tuple(Data) ->
     Timestamp = convert_time(get_curr_time())
@@ -28,7 +40,7 @@ make_tuple({Unit, Name}, Schema, Data)
   , is_list(Schema)
   , is_tuple(Data)
   ->
-    {Index, _Type} = dict:find(Name, dict:from_list(Schema))
+    {Index, _Type} = dict:fetch(Name, dict:from_list(Schema))
   , Timestamp = convert_time({Unit, erlang:element(Index, Data)})
 
   , new_tuple(Timestamp, Data)
@@ -39,7 +51,14 @@ make_tuple({Unit, Name}, Schema, Data)
 push(Tuple = #ydb_tuple{}) ->
     ydb_plan_node:notify(
         erlang:self()
-      , {'$gen_cast', {delegate, {tuple, Tuple}}}
+      , {tuple, Tuple}
+    )
+;
+
+push(Tuples) when is_list(Tuples) ->
+    ydb_plan_node:notify(
+        erlang:self()
+      , {tuples, Tuples}
     )
 .
 
