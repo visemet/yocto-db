@@ -67,7 +67,11 @@ make_tuple({Unit, Name}, Schema, Data)
 
 %% ----------------------------------------------------------------- %%
 
--spec push(Tuple :: #ydb_tuple{}) -> ok.
+-spec push
+    (Tuple :: #ydb_tuple{}) -> ok
+
+  ; (Tuples :: [#ydb_tuple{}]) -> ok
+.
 
 %% @doc TODO
 push(Tuple = #ydb_tuple{}) ->

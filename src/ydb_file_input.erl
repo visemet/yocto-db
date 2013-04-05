@@ -156,7 +156,7 @@ post_init() -> ydb_plan_node:relegate(erlang:self(), {read}).
 
 %% ----------------------------------------------------------------- %%
 
--spec open(Filename :: file:name_all() | iodata()) ->
+-spec open(Filename :: string()) ->
     IoDevice :: file:io_device().
 
 %% @doc Opens a particular file and returns the IO device.
