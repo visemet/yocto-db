@@ -56,7 +56,7 @@ delegate(_Request, State) ->
   , State :: #socket_input{}
   , Extras :: list()
 ) ->
-    {ok, State :: #socket_input{}}
+    {ok, NewState :: #socket_input{}}
 .
 
 %% @doc TODO
