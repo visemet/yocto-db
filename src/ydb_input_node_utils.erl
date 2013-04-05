@@ -1,6 +1,7 @@
-% @author Max Hirschhorn
-%
-% @doc This module contains utility functions used for inputting tuples.
+%% @author Max Hirschhorn <maxh@caltech.edu>
+%%
+%% @doc This module contains utility functions used for inputting
+%%      tuples.
 -module(ydb_input_node_utils).
 
 -export([make_tuples/3, make_tuple/3, push/1]).
@@ -16,6 +17,15 @@
 %%%  API                                                            %%%
 %%% =============================================================== %%%
 
+-spec make_tuples(
+    Timestamp :: integer()
+  , Schema :: list()
+  , Data :: list()
+) ->
+    Tuples :: list()
+.
+
+%% @doc Makes a list of tuples of a given schema and set of data.
 make_tuples(Timestamp, Schema, Data) when is_list(Data) ->
     lists:map(
         fun (Datum) when is_tuple(Datum) ->
@@ -28,6 +38,15 @@ make_tuples(Timestamp, Schema, Data) when is_list(Data) ->
 
 %% ----------------------------------------------------------------- %%
 
+-spec make_tuple(
+    Timestamp :: {Unit :: atom(), Name :: atom()}
+  , Schema :: list()
+  , Data :: tuple()
+) ->
+    Tuple :: ydb_tuple()
+.
+
+%% @doc Makes a new tuple with a timestamp if not given.
 make_tuple('$auto_timestamp', _Schema, Data) when is_tuple(Data) ->
     Timestamp = convert_time(get_curr_time())
 
@@ -48,6 +67,9 @@ make_tuple({Unit, Name}, Schema, Data)
 
 %% ----------------------------------------------------------------- %%
 
+-spec push(Tuple :: ydb_tuple()) -> ok.
+
+%% @doc TODO
 push(Tuple = #ydb_tuple{}) ->
     ydb_plan_node:notify(
         erlang:self()
@@ -66,6 +88,11 @@ push(Tuples) when is_list(Tuples) ->
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
+-spec new_tuple(Timestamp :: integer(), Data :: tuple()) ->
+    Tuple :: ydb_tuple()
+.
+
+%% @doc Creates a new tuple.
 new_tuple(Timestamp, Data)
   when
     is_integer(Timestamp), Timestamp >= 0
@@ -79,6 +106,9 @@ new_tuple(Timestamp, Data)
 
 %% ----------------------------------------------------------------- %%
 
+-spec get_curr_time() -> {Unit :: atom(), TimeInMicroSecs :: integer()}.
+
+%% @doc Gets the current time in microseconds.
 get_curr_time() ->
     {MegaSecs, Secs, MicroSecs} = erlang:now()
 
@@ -90,6 +120,12 @@ get_curr_time() ->
 
 %% ----------------------------------------------------------------- %%
 
+-spec convert_time({Unit :: atom(), TimeInSecs :: integer()}) ->
+    {TimeInMicroSecs :: integer()}
+  | {error, {badarg, Unit :: atom()}}
+.
+
+%% @doc Converts a time to microseconds.
 convert_time({micro_sec, MicroSecs}) ->
     MicroSecs
 ;
