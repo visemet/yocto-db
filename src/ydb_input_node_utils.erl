@@ -18,7 +18,7 @@
 %%% =============================================================== %%%
 
 -spec make_tuples(
-    Timestamp :: integer()
+    Timestamp :: {Unit :: atom(), Name :: atom()}
   , Schema :: list()
   , Data :: list()
 ) ->
@@ -88,7 +88,7 @@ push(Tuples) when is_list(Tuples) ->
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
--spec new_tuple(Timestamp :: integer(), Data :: tuple()) ->
+-spec new_tuple(Timestamp :: non_neg_integer(), Data :: tuple()) ->
     Tuple :: #ydb_tuple{}
 .
 
@@ -121,7 +121,7 @@ get_curr_time() ->
 %% ----------------------------------------------------------------- %%
 
 -spec convert_time({Unit :: atom(), TimeInSecs :: integer()}) ->
-    {TimeInMicroSecs :: integer()}
+    TimeInMicroSecs :: integer()
   | {error, {badarg, Unit :: atom()}}
 .
 

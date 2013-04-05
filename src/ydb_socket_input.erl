@@ -8,7 +8,7 @@
 -export([start_link/2]).
 -export([init/1, delegate/2, delegate/3]).
 
--record(socket_input, {port_no :: integer(), socket :: integer()}).
+-record(socket_input, {port_no :: integer(), socket :: port()}).
 
 %%% =============================================================== %%%
 %%%  API                                                            %%%
@@ -55,8 +55,8 @@ delegate(_Request, State) ->
     Request :: atom()
   , State :: #socket_input{}
   , Extras :: list()
-} ->
-    {ok, State}
+) ->
+    {ok, State :: #socket_input{}}
 .
 
 %% @doc TODO

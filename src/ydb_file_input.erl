@@ -8,6 +8,8 @@
 -export([start_link/2]).
 -export([init/1, delegate/2, delegate/3]).
 
+-include_lib("kernel/include/file.hrl").
+
 -record(file_input, {
     io_device :: file:io_device()
   , batch_size :: integer()
