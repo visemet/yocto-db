@@ -6,6 +6,12 @@
 
 -export([make_tuples/3, make_tuple/3, push/1]).
 
+% Testing for private functions.
+-define(NOTEST, true).
+-ifdef(TEST).
+-export([convert_time/1, new_tuple/2]).
+-endif.
+
 -include("ydb_plan_node.hrl").
 
 % Number of seconds in a megasecond.
@@ -124,12 +130,19 @@ get_curr_time() ->
 
 %% ----------------------------------------------------------------- %%
 
--spec convert_time({Unit :: atom(), TimeInSecs :: integer()}) ->
+-spec convert_time({Unit :: atom(), TimeInUnit :: integer()}) ->
     TimeInMicroSecs :: integer()
   | {error, {badarg, Unit :: atom()}}
 .
 
 %% @doc Converts a time to microseconds.
+convert_time({_Unit, Time})
+  when
+    Time < 0
+  ->
+    {error, {badarg, Time}}
+;
+
 convert_time({micro_sec, MicroSecs}) ->
     MicroSecs
 ;
