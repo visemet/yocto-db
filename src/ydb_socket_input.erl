@@ -21,7 +21,7 @@
   | {error, Error :: term()}
 .
 
-%% @doc TODO
+%% @doc Starts the input node in the supervisor hierarchy.
 start_link(Args, Options) ->
     ydb_plan_node:start_link(?MODULE, Args, Options)
 .
@@ -33,19 +33,20 @@ start_link(Args, Options) ->
   | {error, {badarg, Term :: term()}}
 .
 
-%% @doc TODO
+%% @doc Initializes the input node's internal state.
 init(Args) when is_list(Args) -> init(Args, #socket_input{}).
 
 -spec delegate(Request :: atom(), State :: #socket_input{}) ->
     {ok, State :: #socket_input{}}
 .
 
-%% @doc TODO
+%% @doc Allows the input node to accept a connection. Allows the
+%%      input node to accept data and convert it into a tuple
+%%      to be pushed along the stream.
 delegate(_Request = {accept}, State = #socket_input{socket = LSock}) ->
     case gen_tcp:accept(LSock) of
         {ok, ASock} ->
-            ?TRACE("accepted")
-          , {ok, State#socket_input{socket=ASock}};
+            {ok, State#socket_input{socket=ASock}};
 
         {error, Reason} ->
             io:fwrite("Error: ~p, ~p~n", [Reason, self()]),
@@ -60,7 +61,7 @@ delegate(
   , State = #socket_input{}
 ) ->
     ydb_plan_node:relegate(
-        erlang:self(), {data, binary_to_term(RawData)}, [schema, timestamp])
+        erlang:self(), {data, list_to_tuple(RawData)}, [schema, timestamp])
   , {ok, State}
 ;
 
@@ -76,7 +77,8 @@ delegate(_Request, State) ->
     {ok, NewState :: #socket_input{}}
 .
 
-%% @doc TODO
+%% @doc Allows the input node to accept data, and request the schema
+%%      and timestamp so that it can be converted into a tuple.
 delegate(
     _Request = {data, Data}
   , State = #socket_input{}
@@ -101,13 +103,13 @@ delegate(_Request, State, _Extras) ->
   | {error, {badarg, Term :: term()}}
 .
 
-%% @doc TODO
+%% @doc Parses initializing arguments to set up the internal state of
+%%      the input node.
 init([], State = #socket_input{}) ->
     NewState = post_init(State)
   , {ok, NewState}
 ;
 
-%TODO: should probably be able to accept options and/or sockets as well.
 init([{port_no, Port} | Args], State = #socket_input{}) ->
     init(Args, State#socket_input{port_no=Port})
 ;
@@ -120,9 +122,10 @@ init([Term | _Args], #socket_input{}) ->
 
 -spec post_init(State :: #socket_input{}) -> State :: #socket_input{}.
 
-%% @doc TODO
+%% @doc Opens a socket at the specified port number and listens for
+%%      and incoming connection.
 post_init(State = #socket_input{port_no = PortNo}) ->
-    {ok, LSock} = gen_tcp:listen(PortNo, [{active, true}, binary])
+    {ok, LSock} = gen_tcp:listen(PortNo, [{active, true}, list])
   , ydb_plan_node:relegate(erlang:self(), {accept})
   , State#socket_input{socket=LSock}.
 
