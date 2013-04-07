@@ -8,6 +8,12 @@
 -export([start_link/2]).
 -export([init/1, delegate/2, delegate/3]).
 
+% Testing for private functions.
+-ifdef(TEST).
+-export([read/2,read/3]).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 -include_lib("kernel/include/file.hrl").
 
 -record(file_input, {
@@ -190,8 +196,8 @@ read(IoDevice, BatchSize) ->
   | {continue, Result :: list()}
 .
 
-%% @doc Reads from an IO device with a particular batch size and list
-%%      of results. TODO
+%% @doc Reads from an IO device of a particular batch size appends to a 
+%%      list of results.
 read(_IoDevice, -1, Result) when is_list(Result) ->
     {done, lists:reverse(Result)}
 ;
@@ -212,6 +218,35 @@ read(IoDevice, BatchSize, Result)
       ; eof ->
             read(IoDevice, -1, Result)
     end
+.
+
+%%% =============================================================== %%%
+%%%  private tests                                                  %%%
+%%% =============================================================== %%%
+
+init_test() ->
+    ?assertMatch(
+        {ok, #file_input{batch_size=34}}
+      , init([], #file_input{batch_size=34})
+    )
+  , ?assertMatch(
+        {ok, #file_input{batch_size=3}}
+      , init(
+            [{filename, "../test/read_test_helper.dta"}]
+          , #file_input{batch_size=3}
+        )
+    )
+  , ?assertMatch(
+        {ok, #file_input{poke_freq=343}}
+      , init(
+            [{filename, "../test/read_test_helper.dta"}]
+          , #file_input{poke_freq=343}
+        )
+    )
+  , ?assertMatch(
+        {error, {badarg, bad}}
+      , init([bad], #file_input{})
+    )
 .
 
 %% ----------------------------------------------------------------- %%

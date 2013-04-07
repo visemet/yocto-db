@@ -7,7 +7,6 @@
 -export([make_tuples/3, make_tuple/3, push/1]).
 
 % Testing for private functions.
--define(NOTEST, true).
 -ifdef(TEST).
 -export([convert_time/1, new_tuple/2]).
 -endif.
