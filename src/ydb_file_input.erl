@@ -26,7 +26,7 @@
   | {error, Error :: term()}
 .
 
-%% @doc TODO
+%% @doc Starts the input node in the supervisor hierarchy.
 start_link(Args, Options) ->
     ydb_plan_node:start_link(?MODULE, Args, Options)
 .
@@ -38,14 +38,16 @@ start_link(Args, Options) ->
   | {error, {badarg, Term :: term}}
 .
 
-%% @doc TODO
+%% @doc Initializes the input node's internal state.
 init(Args) when is_list(Args) -> init(Args, #file_input{}).
 
 -spec delegate(Request :: atom(), State :: #file_input{}) ->
     {ok, State :: #file_input{}}
 .
 
-%% @doc TODO
+%% @doc Accepts requests for the next tuple in the file and
+%%      sends out a request for the relevant schema and timestamp,
+%%      in order to construct the tuple.
 delegate(Request = {read}, State = #file_input{}) ->
     ydb_plan_node:relegate(
         erlang:self()
@@ -68,7 +70,9 @@ delegate(_Request, State) ->
     {ok, State :: #file_input{}}
 .
 
-%% @doc TODO
+%% @doc Reads the next line in a file, converts it to a tuple, and
+%%      pushes it to the next node in the stream. Closes the file
+%%      when the end is reached.
 delegate(
     Request = {read}
   , State = #file_input{
@@ -124,7 +128,8 @@ delegate(_Request, State, _Extras) ->
   | {error, {badarg, Term :: term()}}
 .
 
-%% @doc TODO
+%% @doc Parses initializing arguments to set up the internal state of
+%%      the input node.
 init([], State = #file_input{}) ->
     post_init()
 
@@ -151,7 +156,7 @@ init([Term | _Args], #file_input{}) ->
 
 -spec post_init() -> ok.
 
-%% @doc TODO
+%% @doc Sends itself its first read request.
 post_init() -> ydb_plan_node:relegate(erlang:self(), {read}).
 
 %% ----------------------------------------------------------------- %%
