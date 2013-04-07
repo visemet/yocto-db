@@ -234,14 +234,14 @@ init_test() ->
   , ?assertMatch(
         {ok, #file_input{batch_size=3}}
       , init(
-            [{filename, "../test/read_test_helper.dta"}]
+            [{filename, "../data/read_test_helper.dta"}]
           , #file_input{batch_size=3}
         )
     )
   , ?assertMatch(
         {ok, #file_input{poke_freq=343}}
       , init(
-            [{filename, "../test/read_test_helper.dta"}]
+            [{filename, "../data/read_test_helper.dta"}]
           , #file_input{poke_freq=343}
         )
     )
