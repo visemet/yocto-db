@@ -78,7 +78,9 @@ make_tuple({Unit, Name}, Schema, Data)
   ; (Tuples :: [#ydb_tuple{}]) -> ok
 .
 
-%% @doc TODO
+%% @doc Pushes the tuple(s) to the listeners of the plan node. Defines
+%%      the way input streams are expected to serve data into the
+%%      system.
 push(Tuple = #ydb_tuple{}) ->
     ydb_plan_node:notify(
         erlang:self()
@@ -101,6 +103,7 @@ push(Tuples) when is_list(Tuples) ->
     Tuple :: #ydb_tuple{}
 .
 
+%% @private
 %% @doc Creates a new tuple.
 new_tuple(Timestamp, Data)
   when
@@ -134,6 +137,7 @@ get_curr_time() ->
   | {error, {badarg, Unit :: atom()}}
 .
 
+%% @private
 %% @doc Converts a time to microseconds.
 convert_time({_Unit, Time})
   when
