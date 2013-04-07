@@ -10,6 +10,7 @@
 
 -record(socket_input, {port_no :: integer(), socket :: port()}).
 
+
 %%% =============================================================== %%%
 %%%  API                                                            %%%
 %%% =============================================================== %%%
@@ -40,10 +41,26 @@ init(Args) when is_list(Args) -> init(Args, #socket_input{}).
 .
 
 %% @doc TODO
-delegate(Request = {listen}, State = #socket_input{}) ->
-    % @max, you had something like ydb_plan_node:notify() in ydb_file_input
-    % here, but I can't figure out what it does...?
-    gen_server:cast(erlang:self(), {delegate, Request, [schema, timestamp]})
+delegate(_Request = {accept}, State = #socket_input{socket = LSock}) ->
+    case gen_tcp:accept(LSock) of
+        {ok, ASock} ->
+            ?TRACE("accepted")
+          , {ok, State#socket_input{socket=ASock}};
+
+        {error, Reason} ->
+            io:fwrite("Error: ~p, ~p~n", [Reason, self()]),
+            {ok, State}
+    end
+;
+
+%% @doc TODO
+% TODO: handle socket closing.
+delegate(
+    _Request = {info, _Info = {tcp, _Socket, RawData}}
+  , State = #socket_input{}
+) ->
+    ydb_plan_node:relegate(
+        erlang:self(), {data, binary_to_term(RawData)}, [schema, timestamp])
   , {ok, State}
 ;
 
@@ -61,24 +78,19 @@ delegate(_Request, State) ->
 
 %% @doc TODO
 delegate(
-    Request = {listen}
-  , State = #socket_input{socket=Socket}
+    _Request = {data, Data}
+  , State = #socket_input{}
   , _Extras = [Schema, Timestamp]
 ) ->
-    inet:setopts(Socket, [{active, once}])
-  , receive
-        {tcp, Socket, BinData} ->
-            ydb_input_node_utils:push(
-                ydb_input_node_utils:make_tuple(Timestamp, Schema,
-                    binary_to_term(BinData))
-            )
-    end
-  , gen_server:cast(erlang:self(), {delegate, Request})
-  , {ok, State};
+    ydb_input_node_utils:push(
+        ydb_input_node_utils:make_tuple(Timestamp, Schema, Data))
+  , {ok, State}
+;
 
 delegate(_Request, State, _Extras) ->
     {ok, State}
 .
+
 
 %%% =============================================================== %%%
 %%%  private functions                                              %%%
@@ -95,6 +107,7 @@ init([], State = #socket_input{}) ->
   , {ok, NewState}
 ;
 
+%TODO: should probably be able to accept options and/or sockets as well.
 init([{port_no, Port} | Args], State = #socket_input{}) ->
     init(Args, State#socket_input{port_no=Port})
 ;
@@ -109,9 +122,9 @@ init([Term | _Args], #socket_input{}) ->
 
 %% @doc TODO
 post_init(State = #socket_input{port_no = PortNo}) ->
-    {ok, LSock} = gen_tcp:listen(PortNo, [{active, false}, binary])
-  , {ok, ASock} = gen_tcp:accept(LSock)
-  , gen_server:cast(erlang:self(), {delegate, {listen}})
-  , State#socket_input{socket=ASock}.
+    {ok, LSock} = gen_tcp:listen(PortNo, [{active, true}, binary])
+  , ydb_plan_node:relegate(erlang:self(), {accept})
+  , State#socket_input{socket=LSock}.
 
 %% ----------------------------------------------------------------- %%
+

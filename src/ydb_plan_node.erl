@@ -18,6 +18,7 @@
 
 -include("ydb_plan_node.hrl").
 
+
 -record(plan_node, {
     type :: atom()
 
@@ -271,7 +272,8 @@ handle_cast(_Request, State) ->
     {noreply, NewState :: #plan_node{}}
 .
 
-%% @doc Removes down subscribers as listeners.
+%% @doc Removes down subscribers as listeners. Passes info receieved
+%%      to the specific type of plan node if it is not dealt with here.
 handle_info(
     {'DOWN', Ref, process, Subscriber, _Reason}
   , State = #plan_node{listeners = Listeners}
@@ -288,9 +290,11 @@ handle_info(
   , {noreply, State#plan_node{listeners=NewListeners}}
 ;
 
-handle_info(_Info, State) ->
-    {noreply, State}
+handle_info(Info, State = #plan_node{type = Type, wrapped = Wrapped}) ->
+    {ok, NewWrapped} = Type:delegate({info, Info}, Wrapped)
+  , {noreply, State#plan_node{wrapped=NewWrapped}}
 .
+
 
 %% ----------------------------------------------------------------- %%
 
