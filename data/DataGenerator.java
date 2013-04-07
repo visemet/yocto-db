@@ -357,7 +357,7 @@ public class DataGenerator {
      */
     private static void writeToFile(String fileName) {
         try {
-            FileWriter fw = new FileWriter(fileName + ".erl");
+            FileWriter fw = new FileWriter(fileName + ".dta");
             BufferedWriter out = new BufferedWriter(fw);
             out.write(toPrint.toString());
             out.close();

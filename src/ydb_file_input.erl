@@ -226,6 +226,7 @@ read(IoDevice, BatchSize, Result)
 %%%  private tests                                                  %%%
 %%% =============================================================== %%%
 
+-ifdef(TEST).
 init_test() ->
     ?assertMatch(
         {ok, #file_input{batch_size=34}}
@@ -250,5 +251,6 @@ init_test() ->
       , init([bad], #file_input{})
     )
 .
+-endif.
 
 %% ----------------------------------------------------------------- %%
