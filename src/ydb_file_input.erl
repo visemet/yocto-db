@@ -183,6 +183,7 @@ open(Filename) ->
   | {continue, Result :: list()}
 .
 
+%% @private
 %% @doc Reads from an IO device with a particular batch size.
 read(IoDevice, BatchSize) ->
     read(IoDevice, BatchSize, [])
@@ -196,6 +197,7 @@ read(IoDevice, BatchSize) ->
   | {continue, Result :: list()}
 .
 
+%% @private
 %% @doc Reads from an IO device of a particular batch size appends to a 
 %%      list of results.
 read(_IoDevice, -1, Result) when is_list(Result) ->
