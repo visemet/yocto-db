@@ -192,7 +192,7 @@ handle_cast(
   , State = #plan_node{listeners = Listeners}
 ) ->
     lists:foreach(
-        fun (Subscriber) when is_pid(Subscriber) ->
+        fun ({Subscriber, _}) when is_pid(Subscriber) ->
             Subscriber ! Message
         end
 
