@@ -10,7 +10,7 @@
 
 % Testing for private functions.
 -ifdef(TEST).
--export([read/2,read/3]).
+-export([open/1,read/2,read/3]).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
@@ -78,7 +78,8 @@ delegate(_Request, State) ->
 
 %% @doc Reads the next line in a file, converts it to a tuple, and
 %%      pushes it to the next node in the stream. Closes the file
-%%      when the end is reached.
+%%      when the end is reached. Frequency of file reads is
+%%      determined by <tt>poke_freq</tt>, in ms.
 delegate(
     Request = {read}
   , State = #file_input{
