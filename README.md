@@ -15,6 +15,27 @@ Test
 
     rebar eunit
 
+Supervisor Hierarchy
+--------------------
+
+    +ydb_sup
+    |
+    +---+ydb_input_stream_sup
+        |
+        +---+ydb_input_stream
+        |   |
+        |   +---+ydb_{file,socket}_input
+        |       |
+        |       +ydb_branch_node
+        |
+        +ydb_query_sup
+        |
+        +---+ydb_query
+
+The ydb\_input\_stream\_sup module supports registering input streams
+either from a file or a socket. The input stream process also spawns
+a branch node process and adds it as a subscriber.
+
 Query Definitions
 -----------------
 
