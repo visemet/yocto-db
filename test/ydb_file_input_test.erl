@@ -67,17 +67,17 @@ read_test_4_helper(Pid, 2) -> Pid ! test_passed;
 read_test_4_helper(Pid, Count) ->
     receive
         {tuples, [
-            {ydb_tuple, _, {first}}
-          , {ydb_tuple, _, {second}}
-          , {ydb_tuple, _, {third}}
+            {ydb_tuple, _Timestamp1, {first}}
+          , {ydb_tuple, _Timestamp2, {second}}
+          , {ydb_tuple, _Timestamp3, {third}}
         ]} ->
             read_test_4_helper(Pid, Count + 1)
       ; {tuples, [
-            {ydb_tuple, _, {fourth}}
-          , {ydb_tuple, _, {fifth}}
+            {ydb_tuple, _Timestamp4, {fourth}}
+          , {ydb_tuple, _Timestamp5, {fifth}}
         ]} ->
             read_test_4_helper(Pid, Count + 1)
-      ; _ -> Pid ! fail
+      ; _Other -> Pid ! fail
     end
 .
     
@@ -98,14 +98,14 @@ read_test_5() ->
 read_test_5_helper(Pid) ->
     receive
         {tuples, [
-            {ydb_tuple, _, {first}}
-          , {ydb_tuple, _, {second}}
-          , {ydb_tuple, _, {third}}
-          , {ydb_tuple, _, {fourth}}
-          , {ydb_tuple, _, {fifth}}
+            {ydb_tuple, _Timestamp1, {first}}
+          , {ydb_tuple, _Timestamp2, {second}}
+          , {ydb_tuple, _Timestamp3, {third}}
+          , {ydb_tuple, _Timestamp4, {fourth}}
+          , {ydb_tuple, _Timestamp5, {fifth}}
         ]} ->
             Pid ! test_passed
-      ; _ -> Pid ! fail
+      ; _Other -> Pid ! fail
     end
 .
 
@@ -127,16 +127,16 @@ read_test_6_helper(Pid, 5) -> Pid ! test_passed;
 
 read_test_6_helper(Pid, Count) ->
     receive
-        {tuples, [{ydb_tuple, _, {first}}]} ->
+        {tuples, [{ydb_tuple, _Timestamp, {first}}]} ->
             read_test_6_helper(Pid, Count + 1)
-      ; {tuples, [{ydb_tuple, _, {second}}]} ->
+      ; {tuples, [{ydb_tuple, _Timestamp, {second}}]} ->
             read_test_6_helper(Pid, Count + 1)
-      ; {tuples, [{ydb_tuple, _, {third}}]} ->
+      ; {tuples, [{ydb_tuple, _Timestamp, {third}}]} ->
             read_test_6_helper(Pid, Count + 1)
-      ; {tuples, [{ydb_tuple, _, {fourth}}]} ->
+      ; {tuples, [{ydb_tuple, _Timestamp, {fourth}}]} ->
             read_test_6_helper(Pid, Count + 1)
-      ; {tuples, [{ydb_tuple, _, {fifth}}]} ->
+      ; {tuples, [{ydb_tuple, _Timestamp, {fifth}}]} ->
             read_test_6_helper(Pid, Count + 1)
-      ; _ -> Pid ! fail
+      ; _Other -> Pid ! fail
     end
 .
