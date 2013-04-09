@@ -8,6 +8,11 @@
 -export([start_link/2]).
 -export([init/1, delegate/2, delegate/3]).
 
+% Testing for private functions.
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 -record(socket_input, {port_no :: integer(), socket :: port()}).
 
 
@@ -123,11 +128,33 @@ init([Term | _Args], #socket_input{}) ->
 -spec post_init(State :: #socket_input{}) -> State :: #socket_input{}.
 
 %% @doc Opens a socket at the specified port number and listens for
-%%      and incoming connection.
+%%      an incoming connection.
 post_init(State = #socket_input{port_no = PortNo}) ->
     {ok, LSock} = gen_tcp:listen(PortNo, [{active, true}, list])
   , ydb_plan_node:relegate(erlang:self(), {accept})
-  , State#socket_input{socket=LSock}.
+  , State#socket_input{socket=LSock}
+.
+
+%%% =============================================================== %%%
+%%%  private tests                                                  %%%
+%%% =============================================================== %%%
+
+-ifdef(TEST).
+init_test() ->
+    ?assertMatch(
+        {ok, #socket_input{port_no=1337, socket=_Socket1}}
+      , init([], #socket_input{port_no=1337})
+    )
+  , ?assertMatch(
+        {ok, #socket_input{port_no=8000, socket=_Socket2}}
+      , init([{port_no, 8000}], #socket_input{})
+    )
+  , ?assertMatch(
+        {error, {badarg, bad}}
+      , init([bad], #socket_input{})
+    )
+.
+-endif.
 
 %% ----------------------------------------------------------------- %%
 

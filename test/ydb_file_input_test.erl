@@ -59,6 +59,7 @@ read_test_4() ->
   , ydb_plan_node:add_listener(InputPid, Listener)
   , receive
         test_passed -> ok
+      ; fail -> fail
     end
 .
 
@@ -92,6 +93,7 @@ read_test_5() ->
   , ydb_plan_node:add_listener(InputPid, Listener)
   , receive
         test_passed -> ok
+      ; fail -> fail
     end
 .
 
@@ -120,6 +122,7 @@ read_test_6() ->
   , ydb_plan_node:add_listener(InputPid, Listener)
   , receive
         test_passed -> ok
+      ; fail -> fail
     end
 .
 
