@@ -15,12 +15,15 @@
 
 -record(socket_input, {port_no :: integer(), socket :: port()}).
 
+-type option() ::
+    {port_no, integer()}
+.
 
 %%% =============================================================== %%%
 %%%  API                                                            %%%
 %%% =============================================================== %%%
 
--spec start_link(Args :: list(), Options :: list()) ->
+-spec start_link(Args :: [option()], Options :: list()) ->
     {ok, Pid :: pid()}
   | ignore
   | {error, Error :: term()}
@@ -33,7 +36,7 @@ start_link(Args, Options) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec init(Args :: list()) ->
+-spec init(Args :: [option()]) ->
     {ok, State :: #socket_input{}}
   | {error, {badarg, Term :: term()}}
 .
@@ -103,7 +106,7 @@ delegate(_Request, State, _Extras) ->
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
--spec init(list(), State :: #socket_input{}) ->
+-spec init([option()], State :: #socket_input{}) ->
     {ok, NewState :: #socket_input{}}
   | {error, {badarg, Term :: term()}}
 .

@@ -22,11 +22,17 @@
   , poke_freq :: integer()
 }).
 
+-type option() ::
+    {filename, Filename :: string()}
+  | {batch_size, BatchSize :: integer()}
+  | {poke_freq, PokeFreq :: integer()}
+.
+
 %%% =============================================================== %%%
 %%%  API                                                            %%%
 %%% =============================================================== %%%
 
--spec start_link(Args :: list(), Options :: list()) ->
+-spec start_link(Args :: [option()], Options :: list()) ->
     {ok, Pid :: pid()}
   | ignore
   | {error, Error :: term()}
@@ -39,7 +45,7 @@ start_link(Args, Options) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec init(Args :: list()) ->
+-spec init(Args :: [option()]) ->
     {ok, State :: #file_input{}}
   | {error, {badarg, Term :: term}}
 .
@@ -130,7 +136,7 @@ delegate(_Request, State, _Extras) ->
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
--spec init(list(), State :: #file_input{}) ->
+-spec init([option()], State :: #file_input{}) ->
     {ok, State :: #file_input{}}
   | {error, {badarg, Term :: term()}}
 .
