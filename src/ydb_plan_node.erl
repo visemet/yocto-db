@@ -312,7 +312,7 @@ terminate(_Reason, _State) -> ok.
     {ok, NewState :: #plan_node{}}
 .
 
-%% @doc Called by a gen_server when it shoudl update its interal state
+%% @doc Called by a gen_server when it should update its interal state
 %%      during a release upgrade or downgrade. Unsupported; the state
 %%      remains the same.
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
