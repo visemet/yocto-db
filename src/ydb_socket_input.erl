@@ -59,8 +59,8 @@ delegate(_Request = {accept}, State = #socket_input{socket = LSock}) ->
   , {ok, State#socket_input{acceptor = APid}}
 ;
 
-%% @doc Allows the input node to accept data and convert it into a tuple
-%%      to be pushed along the stream.
+%% @doc Allows the input node to accept data and convert it into a
+%%      tuples to be pushed along the stream.
 delegate(
     _Request = {info, _Info = {tcp, _Socket, RawData}}
   , State = #socket_input{}
@@ -110,7 +110,9 @@ delegate(
   , _Extras = [Schema, Timestamp]
 ) ->
     lists:foreach(fun(X) -> ydb_input_node_utils:push(
-        ydb_input_node_utils:make_tuple(Timestamp, Schema, X)) end, Data)
+        ydb_input_node_utils:make_tuple(Timestamp, Schema, X)) end
+      , Data
+    )
   , {ok, State}
 ;
 
@@ -156,10 +158,7 @@ post_init(State = #socket_input{port_no = PortNo}) ->
 
 %% ----------------------------------------------------------------- %%
 
-%% TODO: can't figure out how to do this for a recursive function
-%-spec accept(LSock :: port(), Pid :: pid()) ->
-%    accept(LSock :: port(), Pid :: pid())
-%.
+-spec accept(LSock :: port(), Pid :: pid()) -> no_return().
 
 %% @doc Listens for incoming connections using the passed in listener,
 %%      and transfers ownership of the resulting socket to the
@@ -167,11 +166,11 @@ post_init(State = #socket_input{port_no = PortNo}) ->
 accept(LSock, Pid) ->
     case gen_tcp:accept(LSock) of
         {ok, ASock} ->
-            gen_tcp:controlling_process(ASock, Pid),
-            accept(LSock, Pid);
+            gen_tcp:controlling_process(ASock, Pid)
+          , accept(LSock, Pid);
         {error, Reason} ->
-            io:fwrite("Error: ~p, ~p~n", [Reason, self()]),
-            accept(LSock, Pid)
+            % TODO io:fwrite("Error: ~p, ~p~n", [Reason, self()]),
+           accept(LSock, Pid)
     end
 .
 

@@ -1,7 +1,7 @@
 %% @author Kalpana Suraesh <ksuraesh@caltech.edu>
 
-%% @doc This module contains utility functions used for sending
-%%      tuples through a socket in an acceptable format.
+%% @doc This module contains utility functions used for sending tuples
+%%      through a socket in an acceptable format.
 -module(ydb_socket_utils).
 
 -export([send_tuples/1, send_tuples/2, send_tuples/3]).
@@ -26,11 +26,12 @@
         -> ok | {error, {badarg, Term :: term()}}
 .
 
-%% @doc Sends a list of tuples in binary format using
-%%      the specified socket, port, or address.
+%% @doc Sends a list of tuples in binary format using the specified
+%%      socket, port, or address.
 send_tuples(PortNo, Data) when is_integer(PortNo) ->
     send_tuples(?DEFAULT_ADDR, PortNo, Data)
 ;
+
 send_tuples(Sock, Data) when is_port(Sock) ->
     if (is_list(Data)) ->
         gen_tcp:send(Sock, term_to_binary(Data))
@@ -38,10 +39,21 @@ send_tuples(Sock, Data) when is_port(Sock) ->
         {error, {badarg, Data}}
     end
 ;
-send_tuples(Address, Data) when is_tuple(Address) ->
-    %% maybe this should just assume that ~anything~ might be
-    %% and address and let inet yell at them otherwise.
-    %% a hostname() is an atom() or string()
+
+send_tuples(Address = {Block1, Block2, Block3, Block4}, Data)
+  when
+    is_integer(Block1)
+  , is_integer(Block2)
+  , is_integer(Block3)
+  , is_integer(Block4)
+  ->
+    send_tuples(Address, ?DEFAULT_PORT, Data)
+;
+
+% For checking if the hostname is an atom or a string. Since we can't
+% check for strings, the best we can do is check if it is a list
+% (of characters).
+send_tuples(Address, Data) when is_atom(Address); is_list(Address) ->
     send_tuples(Address, ?DEFAULT_PORT, Data)
 .
 
@@ -53,8 +65,7 @@ send_tuples(Address, Data) when is_tuple(Address) ->
 
 %% @doc Sends a list of tuples in binary format at the default port
 %%      and address.
-send_tuples(Data) ->
-    send_tuples(?DEFAULT_ADDR, ?DEFAULT_PORT, Data).
+send_tuples(Data) -> send_tuples(?DEFAULT_ADDR, ?DEFAULT_PORT, Data).
 
 %% ----------------------------------------------------------------- %%
 
@@ -66,8 +77,8 @@ send_tuples(Data) ->
     ok | {error, {badarg, Term :: term()}}
 .
 
-%% @doc Creates a socket at the specified address and port
-%%      and sends a list of tuples  through that socket.
+%% @doc Creates a socket at the specified address and port and sends
+%%      a list of tuples through that socket.
 send_tuples(Address, PortNo, Data) ->
     {ok, Sock} = gen_tcp:connect(Address, PortNo, []),
     send_tuples(Sock, Data)
