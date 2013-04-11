@@ -48,9 +48,7 @@ init(Args) when is_list(Args) -> init(Args, #socket_input{}).
     {ok, State :: #socket_input{}}
 .
 
-%% @doc Allows the input node to accept a connection. Allows the
-%%      input node to accept data and convert it into a tuple
-%%      to be pushed along the stream.
+%% @doc Allows the input node to accept a connection.
 delegate(_Request = {accept}, State = #socket_input{socket = LSock}) ->
     case gen_tcp:accept(LSock) of
         {ok, ASock} ->
@@ -62,14 +60,19 @@ delegate(_Request = {accept}, State = #socket_input{socket = LSock}) ->
     end
 ;
 
-%% @doc TODO
+%% @doc Allows the input node to accept data and convert it into a tuple
+%%      to be pushed along the stream.
 % TODO: handle socket closing.
 delegate(
     _Request = {info, _Info = {tcp, _Socket, RawData}}
   , State = #socket_input{}
 ) ->
     ydb_plan_node:relegate(
-        erlang:self(), {data, list_to_tuple(RawData)}, [schema, timestamp])
+        erlang:self()
+      , {data, binary_to_term(RawData)}
+      , [schema, timestamp]
+      )
+
   , {ok, State}
 ;
 
@@ -92,8 +95,8 @@ delegate(
   , State = #socket_input{}
   , _Extras = [Schema, Timestamp]
 ) ->
-    ydb_input_node_utils:push(
-        ydb_input_node_utils:make_tuple(Timestamp, Schema, Data))
+    lists:foreach(fun(X) -> ydb_input_node_utils:push(
+        ydb_input_node_utils:make_tuple(Timestamp, Schema, X)) end, Data)
   , {ok, State}
 ;
 
@@ -133,7 +136,7 @@ init([Term | _Args], #socket_input{}) ->
 %% @doc Opens a socket at the specified port number and listens for
 %%      an incoming connection.
 post_init(State = #socket_input{port_no = PortNo}) ->
-    {ok, LSock} = gen_tcp:listen(PortNo, [{active, true}, list])
+    {ok, LSock} = gen_tcp:listen(PortNo, [{active, true}, binary])
   , ydb_plan_node:relegate(erlang:self(), {accept})
   , State#socket_input{socket=LSock}
 .
