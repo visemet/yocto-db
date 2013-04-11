@@ -51,6 +51,18 @@ results.
 ### Project
 
     {ydb_project_node, child_node, specification}
+    
+### Joins
+   
+    {ydb_join_node, left_node, right_node, predicate :: clause()}
+    
+### Set Union
+
+    {ydb_union_node, left_node, right_node}
+    
+### Set Difference
+ 
+    {ydb_diff_node, left_node, right_node}
 
 Predicate Format
 ----------------
