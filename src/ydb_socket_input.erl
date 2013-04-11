@@ -6,14 +6,15 @@
 -behaviour(ydb_plan_node).
 
 -export([start_link/2]).
--export([init/1, delegate/2, delegate/3]).
+-export([init/1, delegate/2, delegate/3, accept/2]).
 
 % Testing for private functions.
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
--record(socket_input, {port_no :: integer(), socket :: port()}).
+-record(socket_input,
+    {port_no :: integer(), socket :: port(), acceptor :: pid()}).
 
 -type option() ::
     {port_no, integer()}
@@ -50,21 +51,16 @@ init(Args) when is_list(Args) -> init(Args, #socket_input{}).
     {ok, State :: #socket_input{}}
 .
 
-%% @doc Allows the input node to accept a connection.
+%% @doc Starts a linked process that will keep listening for and
+%%      accepting new connections.
 delegate(_Request = {accept}, State = #socket_input{socket = LSock}) ->
-    case gen_tcp:accept(LSock) of
-        {ok, ASock} ->
-            {ok, State#socket_input{socket=ASock}};
-
-        {error, Reason} ->
-            io:fwrite("Error: ~p, ~p~n", [Reason, self()]),
-            {ok, State}
-    end
+    process_flag(trap_exit, true)
+  , APid = spawn_link(?MODULE, accept, [LSock, self()])
+  , {ok, State#socket_input{acceptor = APid}}
 ;
 
 %% @doc Allows the input node to accept data and convert it into a tuple
 %%      to be pushed along the stream.
-% TODO: handle socket closing.
 delegate(
     _Request = {info, _Info = {tcp, _Socket, RawData}}
   , State = #socket_input{}
@@ -76,6 +72,20 @@ delegate(
       )
 
   , {ok, State}
+;
+
+%% @doc Restarts the acceptor process if it exits for any reason.
+delegate(
+    _Request = {info, _Info = {'EXIT', FromPid, _Reason}}
+  , State = #socket_input{acceptor = APid}
+) ->
+    IsAcceptor = FromPid == APid
+  , if IsAcceptor ->
+        ydb_plan_node:relegate(erlang:self(), {accept})
+      , {ok, State}
+  ; true ->
+      {ok, State}
+    end
 ;
 
 delegate(_Request, State) ->
@@ -107,7 +117,6 @@ delegate(
 delegate(_Request, State, _Extras) ->
     {ok, State}
 .
-
 
 %%% =============================================================== %%%
 %%%  private functions                                              %%%
@@ -143,6 +152,27 @@ post_init(State = #socket_input{port_no = PortNo}) ->
     {ok, LSock} = gen_tcp:listen(PortNo, [{active, true}, binary])
   , ydb_plan_node:relegate(erlang:self(), {accept})
   , State#socket_input{socket=LSock}
+.
+
+%% ----------------------------------------------------------------- %%
+
+%% TODO: can't figure out how to do this for a recursive function
+%-spec accept(LSock :: port(), Pid :: pid()) ->
+%    accept(LSock :: port(), Pid :: pid())
+%.
+
+%% @doc Listens for incoming connections using the passed in listener,
+%%      and transfers ownership of the resulting socket to the
+%%      specified Pid. Then recursively calls itself to listen again.
+accept(LSock, Pid) ->
+    case gen_tcp:accept(LSock) of
+        {ok, ASock} ->
+            gen_tcp:controlling_process(ASock, Pid),
+            accept(LSock, Pid);
+        {error, Reason} ->
+            io:fwrite("Error: ~p, ~p~n", [Reason, self()]),
+            accept(LSock, Pid)
+    end
 .
 
 %%% =============================================================== %%%
