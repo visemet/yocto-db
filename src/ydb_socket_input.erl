@@ -44,6 +44,8 @@ start_link(Args, Options) ->
 %% @doc Initializes the input node's internal state.
 init(Args) when is_list(Args) -> init(Args, #socket_input{}).
 
+%% ----------------------------------------------------------------- %%
+
 -spec delegate(Request :: atom(), State :: #socket_input{}) ->
     {ok, State :: #socket_input{}}
 .
@@ -79,6 +81,8 @@ delegate(
 delegate(_Request, State) ->
     {ok, State}
 .
+
+%% ----------------------------------------------------------------- %%
 
 -spec delegate(
     Request :: atom()
@@ -163,4 +167,3 @@ init_test() ->
 -endif.
 
 %% ----------------------------------------------------------------- %%
-

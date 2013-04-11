@@ -4,13 +4,16 @@
 %%      tuples through a socket in an acceptable format.
 -module(ydb_socket_utils).
 
-%% Functions for the client
--export([send_tuples/2]).
+-export([send_tuples/2, connect_and_send_tuples/3]).
 
 % Default port number.
 -define(DEFAULT_PORT, 9001).
 % Default address (localhost).
 -define(DEFAULT_ADDR, {127, 0, 0, 1}).
+
+%%% =============================================================== %%%
+%%%  API                                                            %%%
+%%% =============================================================== %%%
 
 -spec send_tuples(Socket :: port(), Data :: list()) ->
     ok | {error, {badarg, Term :: term()}}
@@ -26,7 +29,9 @@ send_tuples(Sock, Data) when is_port(Sock) ->
     end
 .
 
--spec create_con_and_send_tuples(
+%% ----------------------------------------------------------------- %%
+
+-spec connect_and_send_tuples(
     Address :: inet:ip_address() | inet:hostname()
   , PortNo :: integer()
   , Data :: list()
@@ -36,8 +41,9 @@ send_tuples(Sock, Data) when is_port(Sock) ->
 
 %% @doc Creates a socket at the specified address and port
 %%      and sends a list of tuples  through that socket.
-create_con_and_send_tuples(Address, PortNo, Data) ->
+connect_and_send_tuples(Address, PortNo, Data) ->
     {ok, Sock} = gen_tcp:connect(Address, PortNo, []),
     send_tuples(Sock, Data)
 .
 
+%% ----------------------------------------------------------------- %%
