@@ -7,7 +7,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 read_test() ->
-    ?assertMatch(
+    Filename = "../data/read_test_helper.dta"
+  , ?assertMatch(
         {done, [5,4,3,2,1]}
       , ydb_file_input:read(none, -1, [1,2,3,4,5])
     )
@@ -17,40 +18,40 @@ read_test() ->
     )
   , ?assertMatch(
         {done, [{first},{second},{third},{fourth},{fifth}]}
-      , read_test_1()
+      , read_test_1(Filename)
     )
   , ?assertMatch(
         {continue, [{first}]}
-      , read_test_2()
+      , read_test_2(Filename)
     )
   , ?assertMatch(
         {done, [{first},{second},{third},{fourth},{fifth}]}
-      , read_test_3()
+      , read_test_3(Filename)
     )
-  , ?assertEqual(ok, read_test_4())
-  , ?assertEqual(ok, read_test_5())
-  , ?assertEqual(ok, read_test_6())
+  , ?assertEqual(ok, read_test_4(Filename))
+  , ?assertEqual(ok, read_test_5(Filename))
+  , ?assertEqual(ok, read_test_6(Filename))
 .
 
 
-read_test_1() ->
-    IoDevice = ydb_file_input:open("../data/read_test_helper.dta")
+read_test_1(Filename) ->
+    IoDevice = ydb_file_input:open(Filename)
   , ydb_file_input:read(IoDevice, 10)
 .
 
-read_test_2() ->
-    IoDevice = ydb_file_input:open("../data/read_test_helper.dta")
+read_test_2(Filename) ->
+    IoDevice = ydb_file_input:open(Filename)
   , ydb_file_input:read(IoDevice, 1)
 .
 
-read_test_3() ->
-    IoDevice = ydb_file_input:open("../data/read_test_helper.dta")
+read_test_3(Filename) ->
+    IoDevice = ydb_file_input:open(Filename)
   , ydb_file_input:read(IoDevice, 6)
 .
 
-read_test_4() ->
+read_test_4(Filename) ->
     {ok, InputPid} = ydb_file_input:start_link([
-        {filename,"../data/read_test_helper.dta"}
+        {filename, Filename}
       , {batch_size, 3}
       , {poke_freq, 1}
       ], []
@@ -79,9 +80,9 @@ read_test_4_helper(Pid, Count) ->
     end
 .
     
-read_test_5() ->
+read_test_5(Filename) ->
     {ok, InputPid} = ydb_file_input:start_link([
-        {filename,"../data/read_test_helper.dta"}
+        {filename, Filename}
       , {batch_size, 5}
       , {poke_freq, 1}
       ], []
@@ -105,9 +106,9 @@ read_test_5_helper(Pid) ->
     end
 .
 
-read_test_6() ->
+read_test_6(Filename) ->
     {ok, InputPid} = ydb_file_input:start_link([
-        {filename,"../data/read_test_helper.dta"}
+        {filename, Filename}
       , {batch_size, 1}
       , {poke_freq, 1}
       ], []

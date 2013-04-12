@@ -15,15 +15,7 @@ write_test() ->
 write_test_1(Filename) ->
     clear_file(Filename)
   , ydb_file_output:write(Filename, [{first}, {second, 2}, {3}])
-  , {ok, InputPid} = ydb_file_input:start_link([
-        {filename, Filename}
-      , {batch_size, 3}
-      , {poke_freq, 10}
-      ], []
-    )
-  , Listener = spawn(?MODULE, write_test_helper, [self()])
-  , ydb_plan_node:add_listener(InputPid, Listener)
-  , handle_messages(Filename)
+  , check_result(Filename)
 .
 
 write_test_2(Filename) ->
@@ -31,22 +23,24 @@ write_test_2(Filename) ->
   , ydb_file_output:write(Filename, [{first}])
   , ydb_file_output:write(Filename, [{second, 2}])
   , ydb_file_output:write(Filename, [{3}])
-  , {ok, InputPid} = ydb_file_input:start_link([
-        {filename, Filename}
-      , {batch_size, 3}
-      , {poke_freq, 10}
-      ], []
-    )
-  , Listener = spawn(?MODULE, write_test_helper, [self()])
-  , ydb_plan_node:add_listener(InputPid, Listener)
-  , handle_messages(Filename)
+  , check_result(Filename)
 .
 
 write_test_3(Filename) ->
     clear_file(Filename)
   , ydb_file_output:write(Filename, [{first}, {second, 2}])
   , ydb_file_output:write(Filename, [{3}])
-  , {ok, InputPid} = ydb_file_input:start_link([
+  , check_result(Filename)
+.
+
+clear_file(Filename) ->
+    % Clear out the file if necessary.
+    IoDevice = file:open(Filename, [write])
+  , file:close(IoDevice)
+.
+
+check_result(Filename) ->
+    {ok, InputPid} = ydb_file_input:start_link([
         {filename, Filename}
       , {batch_size, 3}
       , {poke_freq, 10}
@@ -54,7 +48,14 @@ write_test_3(Filename) ->
     )
   , Listener = spawn(?MODULE, write_test_helper, [self()])
   , ydb_plan_node:add_listener(InputPid, Listener)
-  , handle_messages(Filename)
+  , receive
+        test_passed ->
+            file:delete(Filename)
+          , ok
+      ; fail ->
+            file:delete(Filename)
+          , fail
+    end
 .
 
 write_test_helper(Pid) ->
@@ -66,22 +67,5 @@ write_test_helper(Pid) ->
         ]} ->
             Pid ! test_passed
       ; _Other -> Pid ! test_passed
-    end
-.
-
-clear_file(Filename) ->
-    % Clear out the file if necessary.
-    IoDevice = file:open(Filename, [write])
-  , file:close(IoDevice)
-.
-
-handle_messages(Filename) ->
-    receive
-        test_passed ->
-            file:delete(Filename)
-          , ok
-      ; fail ->
-            file:delete(Filename)
-          , fail
     end
 .

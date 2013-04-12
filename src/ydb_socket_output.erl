@@ -10,7 +10,6 @@
 
 % Testing for private functions.
 -ifdef(TEST).
-%-export([open/1, close/1, write/2]).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
@@ -145,17 +144,17 @@ post_init(State = #socket_output{port_no = PortNo, address = Addr}) ->
 %%%  private tests                                                  %%%
 %%% =============================================================== %%%
 
--ifdef(TEST).
+-ifdef(TEST). % TODO
 init_test() ->
-    ?assertMatch(
-        {ok, #socket_output{port_no=1337, socket=_Socket1}}
-      , init([], #socket_output{port_no=1337})
-    )
-  , ?assertMatch(
-        {ok, #socket_output{port_no=8000, address=localhost}}
-      , init([{port_no, 8000}, {address, localhost}], #socket_output{})
-    )
-  , ?assertMatch(
+%    ?assertMatch(
+%        {ok, #socket_output{port_no=1337}}
+%      , init([], #socket_output{port_no=1337})
+%    )
+  %, ?assertMatch(
+  %      {ok, #socket_output{port_no=9000, address={127,0,0,1}}}
+  %    , init([{port_no, 9000}, {address, {127,0,0,1}}], #socket_output{})
+  %  )
+  ?assertMatch(
         {error, {badarg, bad}}
       , init([bad], #socket_output{})
     )
