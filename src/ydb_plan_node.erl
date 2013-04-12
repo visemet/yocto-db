@@ -18,7 +18,6 @@
 
 -include("ydb_plan_node.hrl").
 
-
 -record(plan_node, {
     type :: atom()
 

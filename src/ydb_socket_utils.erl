@@ -11,6 +11,11 @@
 % Default address (localhost).
 -define(DEFAULT_ADDR, {127, 0, 0, 1}).
 
+-type address() ::
+    inet:ip_address()
+  | inet:hostname()
+.
+
 %%% =============================================================== %%%
 %%%  API                                                            %%%
 %%% =============================================================== %%%
@@ -20,9 +25,7 @@
         -> ok | {error, {badarg, Term :: term()}}
   ; (Socket :: port(), Data :: list())
         -> ok | {error, {badarg, Term :: term()}}
-  ; (Address :: inet:ip_address(), Term :: term())
-        -> ok | {error, {badarg, Term :: term()}}
-  ; (Address :: inet:hostname(), Term :: term())
+  ; (Address :: address(), Term :: term())
         -> ok | {error, {badarg, Term :: term()}}
 .
 
@@ -50,9 +53,6 @@ send_tuples(Address = {Block1, Block2, Block3, Block4}, Data)
     send_tuples(Address, ?DEFAULT_PORT, Data)
 ;
 
-% For checking if the hostname is an atom or a string. Since we can't
-% check for strings, the best we can do is check if it is a list
-% (of characters).
 send_tuples(Address, Data) when is_atom(Address); is_list(Address) ->
     send_tuples(Address, ?DEFAULT_PORT, Data)
 .

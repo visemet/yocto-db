@@ -6,7 +6,8 @@
 -behaviour(ydb_plan_node).
 
 -export([start_link/2]).
--export([init/1, delegate/2, delegate/3, accept/2]).
+-export([init/1, delegate/2, delegate/3]).
+-export([accept/2]).
 
 % Testing for private functions.
 -ifdef(TEST).
@@ -166,11 +167,10 @@ post_init(State = #socket_input{port_no = PortNo}) ->
 accept(LSock, Pid) ->
     case gen_tcp:accept(LSock) of
         {ok, ASock} ->
-            gen_tcp:controlling_process(ASock, Pid)
-          , accept(LSock, Pid);
-        {error, Reason} ->
-            % TODO io:fwrite("Error: ~p, ~p~n", [Reason, self()]),
-           accept(LSock, Pid)
+            gen_tcp:controlling_process(ASock, Pid),
+            accept(LSock, Pid);
+        {error, _Reason} ->
+            accept(LSock, Pid)
     end
 .
 
