@@ -57,10 +57,7 @@ read_test_4() ->
     )
   , Listener = spawn(?MODULE, read_test_4_helper, [self(), 0])
   , ydb_plan_node:add_listener(InputPid, Listener)
-  , receive
-        test_passed -> ok
-      ; fail -> fail
-    end
+  , handle_messages()
 .
 
 read_test_4_helper(Pid, 2) -> Pid ! test_passed;
@@ -91,10 +88,7 @@ read_test_5() ->
     )
   , Listener = spawn(?MODULE, read_test_5_helper, [self()])
   , ydb_plan_node:add_listener(InputPid, Listener)
-  , receive
-        test_passed -> ok
-      ; fail -> fail
-    end
+  , handle_messages()
 .
 
 read_test_5_helper(Pid) ->
@@ -120,10 +114,7 @@ read_test_6() ->
     )
   , Listener = spawn(?MODULE, read_test_6_helper, [self(), 0])
   , ydb_plan_node:add_listener(InputPid, Listener)
-  , receive
-        test_passed -> ok
-      ; fail -> fail
-    end
+  , handle_messages()
 .
 
 read_test_6_helper(Pid, 5) -> Pid ! test_passed;
@@ -141,5 +132,12 @@ read_test_6_helper(Pid, Count) ->
       ; {tuples, [{ydb_tuple, _Timestamp, {fifth}}]} ->
             read_test_6_helper(Pid, Count + 1)
       ; _Other -> Pid ! fail
+    end
+.
+
+handle_messages() ->
+    receive
+        test_passed -> ok
+      ; fail -> fail
     end
 .

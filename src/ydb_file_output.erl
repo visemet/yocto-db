@@ -53,9 +53,6 @@ init(Args) when is_list(Args) -> init(Args, #file_output{}).
 .
 
 %% @doc Accepts tuples and writes them to the file.
-delegate(_Request = {info, Message}, State) ->
-    delegate(Message, State)
-;
 delegate(
     _Request = {tuple, Tuple}
   , State = #file_output{filename=Filename}
@@ -74,6 +71,10 @@ delegate(
     write(Filename, Tuples)
   , {ok, State}
 ;  
+
+delegate(_Request = {info, Message}, State) ->
+    delegate(Message, State)
+;
 
 delegate(_Request, State) ->
     {ok, State}

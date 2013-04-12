@@ -1,18 +1,25 @@
 %% @author Kalpana Suraesh <ksuraesh@caltech.edu>
 
-%% @doc This module reads input from a socket and pushes it to the
-%%      query planner.
+%% @doc This module receives tuples from the query planner and outputs
+%%      it to a socket.
 -module(ydb_socket_output).
 -behaviour(ydb_plan_node).
 
 -export([start_link/2]).
 -export([init/1, delegate/2, delegate/3]).
 
--record(socket_input,
-    {port_no :: integer(), socket :: port(), address}).
+% Testing for private functions.
+-ifdef(TEST).
+%-export([open/1, close/1, write/2]).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
+-record(socket_output,
+    {port_no :: integer(), socket :: port(), address :: term()}).
 
 -type option() ::
     {port_no, integer()}
+  | {address, term()}
 .
 
 %%% =============================================================== %%%
@@ -25,7 +32,7 @@
   | {error, Error :: term()}
 .
 
-%% @doc Starts the input node in the supervisor hierarchy.
+%% @doc Starts the output node in the supervisor hierarchy.
 start_link(Args, Options) ->
     ydb_plan_node:start_link(?MODULE, Args, Options)
 .
@@ -33,45 +40,40 @@ start_link(Args, Options) ->
 %% ----------------------------------------------------------------- %%
 
 -spec init(Args :: [option()]) ->
-    {ok, State :: #socket_input{}}
+    {ok, State :: #socket_output{}}
   | {error, {badarg, Term :: term()}}
 .
 
 %% @doc Initializes the output node's internal state.
-init(Args) when is_list(Args) -> init(Args, #socket_input{}).
+init(Args) when is_list(Args) -> init(Args, #socket_output{}).
 
 %% ----------------------------------------------------------------- %%
 
--spec delegate(Request :: atom(), State :: #socket_input{}) ->
-    {ok, State :: #socket_input{}}
+-spec delegate(Request :: atom(), State :: #socket_output{}) ->
+    {ok, State :: #socket_output{}}
 .
 
-%% @doc Sends received tuples out through a socket at the
-%%      port and address initially specified.
+%% @doc Sends received tuples out through a socket at the port
+%%      and address initially specified.
+delegate(
+    _Request = {tuple, Tuple}
+  , State = #socket_output{socket = Sock}
+) ->
+    ydb_socket_utils:send_tuples(Sock, [Tuple])
+  , {ok, State}
+;
+
 delegate(
     _Request = {tuples, Tuples}
-  , State = #socket_input{socket = Sock}
-) when is_list(Tuples) ->
+  , State = #socket_output{socket = Sock}
+) when is_list(Tuples)
+->
     ydb_socket_utils:send_tuples(Sock, Tuples)
   , {ok, State}
 ;
 
-delegate(_Request = {tuple, Tuple}, State = #socket_input{}) ->
-    delegate({tuples, [Tuple]}, State)
-;
-
-delegate(
-    _Request = {info, Info = {tuples, Tuples}}
-  , State = #socket_input{}
-) when is_list(Tuples) ->
-    delegate(Info, State)
-;
-
-delegate(
-    _Request = {info, _Info = {tuple, Tuple}}
-  , State = #socket_input{}
-) ->
-    delegate({tuples, [Tuple]}, State)
+delegate(_Request = {info, Message}, State) ->
+    delegate(Message, State)
 ;
 
 delegate(_Request, State) ->
@@ -82,13 +84,13 @@ delegate(_Request, State) ->
 
 -spec delegate(
     Request :: atom()
-  , State :: #socket_input{}
+  , State :: #socket_output{}
   , Extras :: list()
 ) ->
-    {ok, NewState :: #socket_input{}}
+    {ok, NewState :: #socket_output{}}
 .
 
-%% @doc Dummy implementation to satisfy plan_ndoe behavior.
+%% @doc Dummy implementation to satisfy plan_node behavior.
 delegate(_Request, State, _Extras) ->
     {ok, State}
 .
@@ -97,43 +99,43 @@ delegate(_Request, State, _Extras) ->
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
--spec init([option()], State :: #socket_input{}) ->
-    {ok, NewState :: #socket_input{}}
+-spec init([option()], State :: #socket_output{}) ->
+    {ok, NewState :: #socket_output{}}
   | {error, {badarg, Term :: term()}}
   | {error, Reason :: term()}
 .
 
 %% @doc Parses initializing arguments to set up the internal state of
 %%      the input node.
-init([], State = #socket_input{}) ->
+init([], State = #socket_output{}) ->
     post_init(State)
 ;
 
-init([{port_no, Port} | Args], State = #socket_input{}) ->
-    init(Args, State#socket_input{port_no=Port})
+init([{port_no, Port} | Args], State = #socket_output{}) ->
+    init(Args, State#socket_output{port_no=Port})
 ;
 
-init([{address, Addr} | Args], State = #socket_input{}) ->
-    init(Args, State#socket_input{address=Addr})
+init([{address, Addr} | Args], State = #socket_output{}) ->
+    init(Args, State#socket_output{address=Addr})
 ;
 
-init([Term | _Args], #socket_input{}) ->
+init([Term | _Args], #socket_output{}) ->
     {error, {badarg, Term}}
 .
 
 %% ----------------------------------------------------------------- %%
 
--spec post_init(State :: #socket_input{}) ->
-    {ok, State :: #socket_input{}}
+-spec post_init(State :: #socket_output{}) ->
+    {ok, State :: #socket_output{}}
   | {error, Reason :: term()}
 .
 
 %% @doc Opens a socket at the specified port number and listens for
 %%      an incoming connection. (TODO)
-post_init(State = #socket_input{port_no = PortNo, address = Addr}) ->
+post_init(State = #socket_output{port_no = PortNo, address = Addr}) ->
     case gen_tcp:connect(Addr, PortNo, []) of
         {ok, Sock} ->
-            {ok, State#socket_input{socket=Sock}};
+            {ok, State#socket_output{socket=Sock}};
         {error, Reason} ->
             {error, Reason}
     end
@@ -143,4 +145,19 @@ post_init(State = #socket_input{port_no = PortNo, address = Addr}) ->
 %%%  private tests                                                  %%%
 %%% =============================================================== %%%
 
-%% TODO.
+-ifdef(TEST).
+init_test() ->
+    ?assertMatch(
+        {ok, #socket_output{port_no=1337, socket=_Socket1}}
+      , init([], #socket_output{port_no=1337})
+    )
+  , ?assertMatch(
+        {ok, #socket_output{port_no=8000, address=localhost}}
+      , init([{port_no, 8000}, {address, localhost}], #socket_output{})
+    )
+  , ?assertMatch(
+        {error, {badarg, bad}}
+      , init([bad], #socket_output{})
+    )
+.
+-endif.

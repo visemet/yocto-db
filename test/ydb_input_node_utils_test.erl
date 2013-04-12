@@ -1,4 +1,4 @@
-%% @author Angela Gong
+%% @author Angela Gong <anjoola@anjoola.com>
 
 %% @doc This module tests the input_node_utils functions.
 -module(ydb_input_node_utils_test).
