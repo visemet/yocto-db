@@ -7,8 +7,8 @@
 -behaviour(gen_server).
 
 -export([
-    start_link/3, notify/2, add_listener/2, remove_listener/2
-  , relegate/2, relegate/3
+    start_link/3, start_link/4, notify/2, add_listener/2
+  , remove_listener/2, relegate/2, relegate/3
 ]).
 
 -export([
@@ -62,6 +62,17 @@
 %% @doc Starts the plan node in the supervisor hierarchy.
 start_link(Type, Args, Options) ->
     gen_server:start_link(?MODULE, {Type, Args, Options}, [])
+.
+
+-spec start_link(atom(), atom(), term(), list()) ->
+    {ok, pid()}
+  | {error, term()}
+.
+
+%% @doc Starts the plan node in the supervisor hierarchy with a
+%%      registered name.
+start_link(Name, Type, Args, Options) ->
+    gen_server:start_link({local, Name}, ?MODULE, {Type, Args, Options}, [])
 .
 
 -spec notify(pid(), term()) -> ok.
