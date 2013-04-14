@@ -4,7 +4,7 @@
 -module(ydb_query_sup).
 -behaviour(supervisor).
 
--export([start_link/0, register/2]).
+-export([start_link/0, start_link/1, register/2]).
 -export([init/1]).
 
 %%% =============================================================== %%%
@@ -16,6 +16,13 @@
 %% @doc TODO
 start_link() ->
     supervisor:start_link(?MODULE, {})
+.
+
+%-spec TODO
+
+%% @doc TODO
+start_link(Name) ->
+    supervisor:start_link(Name, ?MODULE, {})
 .
 
 %-spec TODO
