@@ -25,8 +25,16 @@
 -type option() ::
     {filename, Filename :: string()}
   | {batch_size, BatchSize :: integer()}
-  | {poke_freq, PokeFreq :: integer()}
-.
+  | {poke_freq, PokeFreq :: integer()}.
+%% Options for the file input:
+%% <ul>
+%%   <li><code>{filename, Filename}</code> - Read input from the file
+%%       <code>Filename</code>.</li>
+%%   <li><code>{batch_size, BatchSize}</code> - Reads
+%%       <code>BatchSize</code> tuples at a time from the file.</li>
+%%   <li><code>{poke_freq, PokeFreq}</code> - Read the file every
+%%       <code>PokeFreq</code> milliseconds.</li>
+%% </ul>
 
 %%% =============================================================== %%%
 %%%  API                                                            %%%
@@ -74,6 +82,7 @@ do_read(Pid) when is_pid(Pid) ->
   | {error, {badarg, Term :: term}}
 .
 
+%% @private
 %% @doc Initializes the input node's internal state.
 init(Args) when is_list(Args) -> init(Args, #file_input{}).
 
@@ -81,6 +90,7 @@ init(Args) when is_list(Args) -> init(Args, #file_input{}).
     {ok, State :: #file_input{}}
 .
 
+%% @private
 %% @doc Accepts requests for the next tuple in the file and
 %%      sends out a request for the relevant schema and timestamp,
 %%      in order to construct the tuple.
@@ -106,6 +116,7 @@ delegate(_Request, State) ->
     {ok, State :: #file_input{}}
 .
 
+%% @private
 %% @doc Reads the next line in a file, converts it to a tuple, and
 %%      pushes it to the next node in the stream. Closes the file
 %%      when the end is reached. Frequency of file reads is
@@ -165,6 +176,7 @@ delegate(_Request, State, _Extras) ->
   | {error, {badarg, Term :: term()}}
 .
 
+%% @private
 %% @doc Parses initializing arguments to set up the internal state of
 %%      the input node.
 init([], State = #file_input{}) ->
@@ -192,6 +204,7 @@ init([Term | _Args], #file_input{}) ->
 -spec open(Filename :: string()) ->
     IoDevice :: file:io_device().
 
+%% @private
 %% @doc Opens a particular file and returns the IO device.
 open(Filename) ->
     {ok, IoDevice} = file:open(Filename, [read])

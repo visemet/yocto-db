@@ -21,8 +21,14 @@
 
 -type option() ::
     {port_no, integer()}
-  | {address, term()}
-.
+  | {address, term()}.
+%% Options for the socket output:
+%% <ul>
+%%   <li><code>{port_no, PortNo}</code> - Outputs to the port specified
+%%       by <code>PortNo</code>.</li>
+%%   <li><code>{address, Address}</code> - Outputs to the address
+%%       specified by <code>Address</code>.</li>
+%% </ul>
 
 %%% =============================================================== %%%
 %%%  API                                                            %%%
@@ -46,6 +52,7 @@ start_link(Args, Options) ->
   | {error, {badarg, Term :: term()}}
 .
 
+%% @private
 %% @doc Initializes the output node's internal state.
 init(Args) when is_list(Args) -> init(Args, #socket_output{}).
 
@@ -55,6 +62,7 @@ init(Args) when is_list(Args) -> init(Args, #socket_output{}).
     {ok, State :: #socket_output{}}
 .
 
+%% @private
 %% @doc Sends received tuples out through a socket at the port
 %%      and address initially specified.
 delegate(
@@ -92,7 +100,8 @@ delegate(_Request, State) ->
     {ok, NewState :: #socket_output{}}
 .
 
-%% @doc Dummy implementation to satisfy plan_node behavior.
+%% @private
+%% @doc Not implemented.
 delegate(_Request, State, _Extras) ->
     {ok, State}
 .
@@ -107,6 +116,7 @@ delegate(_Request, State, _Extras) ->
   | {error, Reason :: term()}
 .
 
+%% @private
 %% @doc Parses initializing arguments to set up the internal state of
 %%      the input node.
 init([], State = #socket_output{}) ->
@@ -132,6 +142,7 @@ init([Term | _Args], #socket_output{}) ->
   | {error, Reason :: term()}
 .
 
+%% @private
 %% @doc Opens a socket at the specified port number and listens for
 %%      an incoming connection. (TODO)
 post_init(State = #socket_output{port_no = PortNo, address = Addr}) ->

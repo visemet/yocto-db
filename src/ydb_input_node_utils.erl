@@ -1,5 +1,6 @@
 %% @author Max Hirschhorn <maxh@caltech.edu>
 
+%% @private
 %% @doc This module contains utility functions used for inputting
 %%      tuples.
 -module(ydb_input_node_utils).
@@ -120,6 +121,7 @@ new_tuple(Timestamp, Data)
 
 -spec get_curr_time() -> {Unit :: atom(), TimeInMicroSecs :: integer()}.
 
+%% @private
 %% @doc Gets the current time in microseconds.
 get_curr_time() ->
     {MegaSecs, Secs, MicroSecs} = erlang:now()

@@ -20,8 +20,12 @@
 }).
 
 -type option() ::
-    {filename, Filename :: string()}
-.
+    {filename, Filename :: string()}.
+%% Options for the file output:
+%% <ul>
+%%   <li><code>{filename, Filename}</code> - Output to a file named
+%%       <code>Filename</code>.</li>
+%% </ul>
 
 %%% =============================================================== %%%
 %%%  API                                                            %%%
@@ -45,6 +49,7 @@ start_link(Args, Options) ->
   | {error, {badarg, Term :: term}}
 .
 
+%% @private
 %% @doc Initializes the output node's internal state.
 init(Args) when is_list(Args) -> init(Args, #file_output{}).
 
@@ -52,6 +57,7 @@ init(Args) when is_list(Args) -> init(Args, #file_output{}).
     {ok, State :: #file_output{}}
 .
 
+%% @private
 %% @doc Accepts tuples and writes them to the file.
 delegate(
     _Request = {tuple, Tuple}
@@ -70,7 +76,7 @@ delegate(
 ->
     write(Filename, Tuples)
   , {ok, State}
-;  
+;
 
 delegate(_Request = {info, Message}, State) ->
     delegate(Message, State)
@@ -80,8 +86,6 @@ delegate(_Request, State) ->
     {ok, State}
 .
 
-%% ----------------------------------------------------------------- %%
-
 -spec delegate(
     Request :: atom()
   , State :: #file_output{}
@@ -90,6 +94,8 @@ delegate(_Request, State) ->
     {ok, NewState :: #file_output{}}
 .
 
+%% @private
+%% @doc Not implmented.
 delegate(_Request, State, _Extras) ->
     {ok, State}
 .
@@ -104,6 +110,7 @@ delegate(_Request, State, _Extras) ->
   | {error, {badarg, Term :: term()}}
 .
 
+%% @private
 %% @doc Parses initializing arguments to set up the internal state of
 %%      the output node.
 init([], State = #file_output{}) ->
@@ -123,12 +130,14 @@ init([Term | _Args], #file_output{}) ->
 -spec open(Filename :: string()) ->
     IoDevice :: file:io_device().
 
+%% @private
 %% @doc Opens a particular file and returns the IO device.
 open(Filename) ->
     {ok, IoDevice} = file:open(Filename, [append])
   , IoDevice
 .
 
+%% @private
 %% @doc Closes an IO device.
 -spec close(IoDevice :: file:io_device()) ->
     ok | {error, Reason :: term()}

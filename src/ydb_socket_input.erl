@@ -21,8 +21,12 @@
 }).
 
 -type option() ::
-    {port_no, integer()}
-.
+    {port_no, PortNo :: integer()}.
+%% Options for the socket input:
+%% <ul>
+%%   <li><code>{port_no, PortNo}</code> - Listens for input on the port
+%%       specified by <code>PortNo</code>.</li>
+%% </ul>
 
 %%% =============================================================== %%%
 %%%  API                                                            %%%
@@ -62,6 +66,7 @@ start_link(Name, Args, Options) ->
   | {error, {badarg, Term :: term()}}
 .
 
+%% @private
 %% @doc Initializes the input node's internal state.
 init(Args) when is_list(Args) -> init(Args, #socket_input{}).
 
@@ -71,6 +76,7 @@ init(Args) when is_list(Args) -> init(Args, #socket_input{}).
     {ok, State :: #socket_input{}}
 .
 
+%% @private
 %% @doc Starts a linked process that will keep listening for and
 %%      accepting new connections.
 delegate(_Request = {accept}, State = #socket_input{socket = LSock}) ->
@@ -79,8 +85,8 @@ delegate(_Request = {accept}, State = #socket_input{socket = LSock}) ->
   , {ok, State#socket_input{acceptor = APid}}
 ;
 
-%% @doc Allows the input node to accept data and convert it into a
-%%      tuples to be pushed along the stream.
+% Allows the input node to accept data and convert it into tuples to be
+% pushed along the stream.
 delegate(
     _Request = {info, _Info = {tcp, _Socket, RawData}}
   , State = #socket_input{}
@@ -94,7 +100,7 @@ delegate(
   , {ok, State}
 ;
 
-%% @doc Restarts the acceptor process if it exits for any reason.
+% Restarts the acceptor process if it exits for any reason.
 delegate(
     _Request = {info, _Info = {'EXIT', FromPid, _Reason}}
   , State = #socket_input{acceptor = APid}
@@ -122,6 +128,7 @@ delegate(_Request, State) ->
     {ok, NewState :: #socket_input{}}
 .
 
+%% @private
 %% @doc Allows the input node to accept data, and request the schema
 %%      and timestamp so that it can be converted into a tuple.
 delegate(
@@ -149,6 +156,7 @@ delegate(_Request, State, _Extras) ->
   | {error, {badarg, Term :: term()}}
 .
 
+%% @private
 %% @doc Parses initializing arguments to set up the internal state of
 %%      the input node.
 init([], State = #socket_input{}) ->
@@ -168,6 +176,7 @@ init([Term | _Args], #socket_input{}) ->
 
 -spec post_init(State :: #socket_input{}) -> State :: #socket_input{}.
 
+%% @private
 %% @doc Opens a socket at the specified port number and listens for
 %%      an incoming connection.
 post_init(State = #socket_input{port_no = PortNo}) ->
@@ -180,6 +189,7 @@ post_init(State = #socket_input{port_no = PortNo}) ->
 
 -spec accept(LSock :: port(), Pid :: pid()) -> no_return().
 
+%% @private
 %% @doc Listens for incoming connections using the passed in listener,
 %%      and transfers ownership of the resulting socket to the
 %%      specified Pid. Then recursively calls itself to listen again.

@@ -1,5 +1,6 @@
 %% @author Kalpana Suraesh <ksuraesh@caltech.edu>
 
+%% @private
 %% @doc This module contains utility functions used for sending tuples
 %%      through a socket in an acceptable format.
 -module(ydb_socket_utils).
