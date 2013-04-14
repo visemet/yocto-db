@@ -22,7 +22,7 @@
     type :: atom()
 
   , schema=[] :: ydb_schema()
-  , timestamp='$auto_timestamp' :: '$auto_timestamp' | {atom(), atom()}
+  , timestamp='$auto_timestamp' :: ydb_timestamp()
 
   , wrapped :: term()
 

@@ -14,6 +14,7 @@
 -endif.
 
 -include_lib("kernel/include/file.hrl").
+-include_lib("ydb_plan_node.hrl").
 
 -record(file_output, {
     filename="out.dta" :: string()
@@ -149,7 +150,7 @@ close(IoDevice) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec write(Filename :: string(), Data :: tuple() | list()) -> ok.
+-spec write(Filename :: string(), Data :: ydb_tuple() | list()) -> ok.
 
 %% @private
 %% @doc Writes tuples to a file. Flushes the output by opening and
