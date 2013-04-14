@@ -6,7 +6,7 @@
 -module(ydb_branch_node).
 -behaviour(gen_server).
 
--export([start_link/2, notify/3, add_listener/3, remove_listener/3]).
+-export([start_link/3, notify/3, add_listener/3, remove_listener/3]).
 
 -export([
     init/1, handle_call/3, handle_cast/2, handle_info/2
@@ -27,7 +27,8 @@
 %%% =============================================================== %%%
 
 -spec start_link(
-    [{atom(), ydb_schema()}]
+    pid() | atom()
+  , [{atom(), ydb_schema()}]
   , [{atom(), ydb_timestamp()}]
 ) ->
     {'ok', pid()}
@@ -35,8 +36,8 @@
 .
 
 %% @doc Starts the branch node in the supervisor hierarchy.
-start_link(Schemas, Timestamps) ->
-    gen_server:start_link(?MODULE, {Schemas, Timestamps}, [])
+start_link(PlanNode, Schemas, Timestamps) ->
+    gen_server:start_link(?MODULE, {PlanNode, Schemas, Timestamps}, [])
 .
 
 -spec notify(pid(), atom(), term()) -> 'ok'.
@@ -83,7 +84,8 @@ remove_listener(PlanNode, Type, Subscriber)
 
 -spec init(
     Args :: {
-        [{atom(), ydb_schema()}]
+        pid() | atom()
+      , [{atom(), ydb_schema()}]
       , [{atom(), ydb_timestamp()}]
     }
 ) ->
@@ -92,8 +94,10 @@ remove_listener(PlanNode, Type, Subscriber)
 .
 
 %% @doc Initializes the internal state of the plan node.
-init({Schemas, Timestamps}) ->
+init({PlanNode, Schemas, Timestamps}) ->
     erlang:process_flag(trap_exit, true)
+
+  , ydb_plan_node:add_listener(PlanNode, erlang:self())
 
   , State = #branch_node{
         schemas=Schemas

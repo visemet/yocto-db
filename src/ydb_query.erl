@@ -1,28 +1,32 @@
--module(ydb_app).
--behaviour(application).
+%% @author Max Hirschhorn <maxh@caltech.edu>
 
--export([register_input_stream/1, register_query/1]).
--export([start/2, stop/1]).
+%% @doc TODO 
+-module(ydb_query).
+-behaviour(supervisor).
+
+-export([start_link/1]).
+-export([init/1]).
 
 %%% =============================================================== %%%
 %%%  API                                                            %%%
 %%% =============================================================== %%%
 
-register_input_stream(Spec) ->
-    ydb_sup:register_input_stream(Spec)
-.
+%-spec TODO
 
-register_query(Spec) ->
-    ydb_sup:register_query(Spec)
+%% @doc TODO
+start_link(Query) ->
+    supervisor:start_link(?MODULE, {Query})
 .
 
 %% ----------------------------------------------------------------- %%
 
-start(normal, _Args) ->
-    ydb_sup:start_link()
-.
+%-spec TODO
 
-stop(_State) -> ok.
+%% @doc TODO
+init({_Query}) ->
+    % TODO call to planner
+    {ok, {{one_for_one, 1, 60}, []}}
+.
 
 %%% =============================================================== %%%
 %%%  private functions                                              %%%
