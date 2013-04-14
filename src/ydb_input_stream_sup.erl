@@ -40,7 +40,7 @@ register(Supervisor, {Name, Type, Args, Options, Schemas, Timestamps}) ->
 
           , transient
           , infinity % supervisor
-          , worker
+          , supervisor
           , [ydb_input_stream]
         }
     )

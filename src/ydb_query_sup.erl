@@ -38,7 +38,7 @@ register(Supervisor, {Name, Query}) ->
 
           , transient
           , infinity % supervisor
-          , worker
+          , supervisor
           , [ydb_query]
         }
     )
