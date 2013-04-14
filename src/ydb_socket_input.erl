@@ -14,8 +14,11 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
--record(socket_input,
-    {port_no :: integer(), socket :: port(), acceptor :: pid()}).
+-record(socket_input, {
+    port_no=9001 :: integer()
+  , socket :: port()
+  , acceptor :: pid()
+}).
 
 -type option() ::
     {port_no, integer()}

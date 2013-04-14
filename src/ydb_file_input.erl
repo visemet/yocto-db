@@ -18,8 +18,8 @@
 
 -record(file_input, {
     io_device :: file:io_device()
-  , batch_size :: integer()
-  , poke_freq :: integer()
+  , batch_size=5 :: integer()
+  , poke_freq=1 :: integer()
 }).
 
 -type option() ::

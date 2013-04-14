@@ -16,7 +16,7 @@
 -include_lib("kernel/include/file.hrl").
 
 -record(file_output, {
-    filename :: string()
+    filename="out.dta" :: string()
 }).
 
 -type option() ::
