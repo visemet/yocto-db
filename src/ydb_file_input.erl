@@ -5,7 +5,7 @@
 -module(ydb_file_input).
 -behaviour(ydb_plan_node).
 
--export([start_link/2]).
+-export([start_link/2, start_link/3]).
 -export([init/1, delegate/2, delegate/3]).
 
 % Testing for private functions.
@@ -41,6 +41,22 @@
 %% @doc Starts the input node in the supervisor hierarchy.
 start_link(Args, Options) ->
     ydb_plan_node:start_link(?MODULE, Args, Options)
+.
+
+-spec start_link(
+    Name :: atom()
+  , Args :: [option()]
+  , Options :: list()
+) ->
+    {ok, Pid :: pid()}
+  | ignore
+  | {error, Error :: term()}
+.
+
+%% @doc Starts the input node in the supervisor hierarchy with a
+%%      registered name.
+start_link(Name, Args, Options) ->
+    ydb_plan_node:start_link(Name, ?MODULE, Args, Options)
 .
 
 %% ----------------------------------------------------------------- %%
