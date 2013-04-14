@@ -58,6 +58,7 @@ read_test_4(Filename) ->
     )
   , Listener = spawn(?MODULE, read_test_4_helper, [self(), 0])
   , ydb_plan_node:add_listener(InputPid, Listener)
+  , ydb_file_input:do_read(InputPid)
   , handle_messages()
 .
 
@@ -89,6 +90,7 @@ read_test_5(Filename) ->
     )
   , Listener = spawn(?MODULE, read_test_5_helper, [self()])
   , ydb_plan_node:add_listener(InputPid, Listener)
+  , ydb_file_input:do_read(InputPid)
   , handle_messages()
 .
 
@@ -115,6 +117,7 @@ read_test_6(Filename) ->
     )
   , Listener = spawn(?MODULE, read_test_6_helper, [self(), 0])
   , ydb_plan_node:add_listener(InputPid, Listener)
+  , ydb_file_input:do_read(InputPid)
   , handle_messages()
 .
 

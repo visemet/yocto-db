@@ -107,8 +107,7 @@ delegate(_Request, State, _Extras) ->
 %% @doc Parses initializing arguments to set up the internal state of
 %%      the output node.
 init([], State = #file_output{}) ->
-    post_init()
-  , {ok, State}
+    {ok, State}
 ;
 
 init([{filename, Filename} | Args], State = #file_output{}) ->
@@ -118,13 +117,6 @@ init([{filename, Filename} | Args], State = #file_output{}) ->
 init([Term | _Args], #file_output{}) ->
     {error, {badarg, Term}}
 .
-
-%% ----------------------------------------------------------------- %%
-
--spec post_init() -> ok.
-
-%% @doc Sends itself its first read request. ? TODO
-post_init() -> ok.
 
 %% ----------------------------------------------------------------- %%
 

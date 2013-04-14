@@ -48,6 +48,7 @@ check_result(Filename) ->
     )
   , Listener = spawn(?MODULE, write_test_helper, [self()])
   , ydb_plan_node:add_listener(InputPid, Listener)
+  , ydb_file_input:do_read(InputPid)
   , receive
         test_passed ->
             file:delete(Filename)

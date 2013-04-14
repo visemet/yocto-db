@@ -5,7 +5,7 @@
 -module(ydb_file_input).
 -behaviour(ydb_plan_node).
 
--export([start_link/2, start_link/3]).
+-export([start_link/2, start_link/3, do_read/1]).
 -export([init/1, delegate/2, delegate/3]).
 
 % Testing for private functions.
@@ -57,6 +57,14 @@ start_link(Args, Options) ->
 %%      registered name.
 start_link(Name, Args, Options) ->
     ydb_plan_node:start_link(Name, ?MODULE, Args, Options)
+.
+
+-spec do_read(Pid :: pid()) -> ok.
+
+%% @doc Tells a particular file input process to start reading from
+%%      the file.
+do_read(Pid) when is_pid(Pid) ->
+    ydb_plan_node:relegate(Pid, {read})
 .
 
 %% ----------------------------------------------------------------- %%
@@ -160,9 +168,7 @@ delegate(_Request, State, _Extras) ->
 %% @doc Parses initializing arguments to set up the internal state of
 %%      the input node.
 init([], State = #file_input{}) ->
-    post_init()
-
-  , {ok, State}
+    {ok, State}
 ;
 
 init([{filename, Filename} | Args], State = #file_input{}) ->
@@ -180,13 +186,6 @@ init([{poke_freq, PollFreq} | Args], State = #file_input{}) ->
 init([Term | _Args], #file_input{}) ->
     {error, {badarg, Term}}
 .
-
-%% ----------------------------------------------------------------- %%
-
--spec post_init() -> ok.
-
-%% @doc Sends itself its first read request.
-post_init() -> ydb_plan_node:relegate(erlang:self(), {read}).
 
 %% ----------------------------------------------------------------- %%
 
