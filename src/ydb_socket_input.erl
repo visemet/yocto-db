@@ -180,7 +180,8 @@ init([Term | _Args], #socket_input{}) ->
 %% @doc Opens a socket at the specified port number and listens for
 %%      an incoming connection.
 post_init(State = #socket_input{port_no = PortNo}) ->
-    {ok, LSock} = gen_tcp:listen(PortNo, [{active, true}, binary])
+    {ok, LSock} = gen_tcp:listen(
+        PortNo, [{active, true}, binary, {reuseaddr, true}])
   , ydb_plan_node:relegate(erlang:self(), {accept})
   , State#socket_input{socket=LSock}
 .
