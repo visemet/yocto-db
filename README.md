@@ -15,6 +15,13 @@ Test
 
     rebar eunit
 
+    
+Documentation
+-------------
+
+    rebar doc
+    
+    
 Supervisor Hierarchy
 --------------------
 
@@ -36,6 +43,41 @@ The ydb\_input\_stream\_sup module supports registering input streams
 either from a file or a socket. The input stream process also spawns
 a branch node process and adds it as a subscriber.
 
+IO Definitions
+--------------
+
+### File Input
+
+    {ydb_file_input,
+        child_node
+      , filename :: string()
+      , batch_size :: integer()
+      , poke_freq :: integer()
+    }
+    
+### File Output
+
+    {ydb_file_output, child_node, filename :: string()}
+    
+### Socket Input
+
+    {ydb_socket_input,
+        child_node
+      , port_no :: integer()
+      , socket :: port()
+      , acceptor :: pid
+    }
+    
+### Socket Output
+
+    {ydb_socket_output,
+        child_node
+      , port_no :: integer()
+      , socket :: port()
+      , address :: term()
+    }
+    
+
 Query Definitions
 -----------------
 
@@ -46,11 +88,15 @@ results.
 
 ### Select
 
-    {ydb_select_node, child_node, predicate :: clause()}
+    {ydb_select, child_node, predicate :: clause()}
 
 ### Project
 
-    {ydb_project_node, child_node, specification}
+The column specification is either just the column name atom() or
+a tuple containing the current column name and the new name for the
+column {atom(), atom()}.
+
+    {ydb_project, child_node, columns :: [atom() | {atom(), atom()}]}
     
 ### Joins
    
@@ -69,25 +115,31 @@ Predicate Format
 
 ### Boolean Operators
 
-    #ydb_and{clauses :: [clause()]}
-    #ydb_or{clauses :: [clause()]}
-    #ydb_not{clause :: clause()}
+    {ydb_and, clauses :: [clause()]}
+    {ydb_or, clauses :: [clause()]}
+    {ydb_not, clause :: clause()}
 
-    clause() :: #ydb_cv{} | #ydb_cc{} | #ydb_and{} | #ydb_or{} | #ydb_not{}
+    clause() :: {ydb_cv} | {ydb_cc} | {ydb_and} | {ydb_or} | {ydb_not}
 
 ### Comparison Operators
 
-    #ydb_cv{
+Comparing a column to a value.
+
+    {ydb_cv,
         column :: atom()
       , operator :: compare()
       , value :: term()
     }
+    
+Comparing two columns together.
 
-    #ydb_cc{
-        left_column :: atom()
+    {ydb_cc,
+        left_col :: atom()
       , operator :: compare()
-      , right_column :: atom()
+      , right_col :: atom()
     }
+
+Comparison operators.
 
     compare() :: 'gt'  | 'lt'  | 'eq'
                | 'lte' | 'gte' | 'ne'

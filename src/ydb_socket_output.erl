@@ -158,17 +158,9 @@ post_init(State = #socket_output{port_no = PortNo, address = Addr}) ->
 %%%  private tests                                                  %%%
 %%% =============================================================== %%%
 
--ifdef(TEST). % TODO
+-ifdef(TEST).
 init_test() ->
-%    ?assertMatch(
-%        {ok, #socket_output{port_no=1337}}
-%      , init([], #socket_output{port_no=1337})
-%    )
-  %, ?assertMatch(
-  %      {ok, #socket_output{port_no=9000, address={127,0,0,1}}}
-  %    , init([{port_no, 9000}, {address, {127,0,0,1}}], #socket_output{})
-  %  )
-  ?assertMatch(
+    ?assertMatch(
         {error, {badarg, bad}}
       , init([bad], #socket_output{})
     )
