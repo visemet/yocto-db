@@ -13,6 +13,7 @@
   , terminate/2, code_change/3
 ]).
 
+%% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
 
 -record(branch_node, {

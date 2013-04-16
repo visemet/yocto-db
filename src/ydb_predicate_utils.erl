@@ -6,10 +6,11 @@
 -module(ydb_predicate_utils).
 
 % TODO remove
--export([is_satisfied/3]).
+-export([is_satisfied/3,check_satisfied/3]).
 -export([compare/3,get_value/3]).
 
--include_lib("ydb_plan_node.hrl").
+%% @headerfile "ydb_plan_node.hrl"
+-include("ydb_plan_node.hrl").
 
 %% ----------------------------------------------------------------- %%
 
@@ -123,7 +124,7 @@ compare(_LValue, _Op, _RValue) ->
 %% ----------------------------------------------------------------- %%
 
 -spec get_value(
-    Tuple :: #ydb_tuple{}
+    Tuple :: ydb_tuple()
   , Schema :: dict()
   , Col :: atom()
 ) ->

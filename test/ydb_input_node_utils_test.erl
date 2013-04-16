@@ -3,7 +3,8 @@
 %% @doc This module tests the input_node_utils functions.
 -module(ydb_input_node_utils_test).
 
--include("src/ydb_plan_node.hrl").
+%% @headerfile "ydb_plan_node.hrl"
+-include("include/ydb_plan_node.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 make_tuples_test() ->

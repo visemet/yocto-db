@@ -1,10 +1,5 @@
-%% @author Max Hirschhorn <maxh@caltech.edu>
-
-%% @doc Header file for the plan node. Contains definitions for the
-%%      schema, predicates, and operators.
-
--export_type([ydb_schema/0, ydb_timestamp/0, compare/0, ydb_and/0,
-              ydb_or/0, ydb_not/0, ydb_cv/0, ydb_cc/0, clause/0]).
+%% Header file for the plan node. Contains definitions for the schema,
+%% predicates, and operators.
 
 -record(ydb_tuple, {
     timestamp=0 :: non_neg_integer()

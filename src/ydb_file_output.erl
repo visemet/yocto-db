@@ -7,14 +7,16 @@
 -export([start_link/2]).
 -export([init/1, delegate/2, delegate/3]).
 
+-include_lib("kernel/include/file.hrl").
+
+%% @headerfile "ydb_plan_node.hrl"
+-include_lib("ydb_plan_node.hrl").
+
 % Testing for private functions.
 -ifdef(TEST).
 -export([open/1, close/1, write/2]).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
-
--include_lib("kernel/include/file.hrl").
--include_lib("ydb_plan_node.hrl").
 
 -record(file_output, {
     filename="out.dta" :: string()

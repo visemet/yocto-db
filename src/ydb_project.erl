@@ -8,6 +8,7 @@
 -export([start_link/2, start_link/3]).
 -export([init/1, delegate/2, delegate/3]).
 
+%% @headerfile "ydb_plan_node.hrl"
 -include_lib("ydb_plan_node.hrl").
 
 % Testing for private functions.

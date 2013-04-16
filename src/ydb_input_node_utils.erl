@@ -7,12 +7,13 @@
 
 -export([make_tuples/3, make_tuple/3, push/1]).
 
+%% @headerfile "ydb_plan_node.hrl"
+-include("ydb_plan_node.hrl").
+
 % Testing for private functions.
 -ifdef(TEST).
 -export([convert_time/1, new_tuple/2]).
 -endif.
-
--include("ydb_plan_node.hrl").
 
 % Number of seconds in a megasecond.
 -define(MegaSecs_To_Secs, 1000000).

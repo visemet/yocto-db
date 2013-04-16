@@ -8,6 +8,9 @@
 -export([start_link/2, start_link/3]).
 -export([init/1, delegate/2, delegate/3]).
 
+%% @headerfile "ydb_plan_node.hrl"
+-include("ydb_plan_node.hrl").
+
 % Testing for private functions.
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -16,60 +19,6 @@
 %%% =============================================================== %%%
 %%%  internal records and types                                     %%%
 %%% =============================================================== %%%
-
--type ydb_tuple() :: {
-    Timestamp :: non_neg_integer()
-  , Data :: tuple()
-}.
-%% A tuple containing the data. Has a timestamp of
-%% <code>Timestamp</code> and data <code>Data</code>.
-
--type ydb_schema() :: [
-    {Name :: atom(), {Index :: pos_integer(), Type :: atom()}}
-].
-%% The schema of the data. is a list of columns, where each column is
-%% specified by a name <code>Name</code>, and a tuple containing their
-%% index <code>Index</code> and type <code>Type</code>.
-
--type compare() :: 'gt' | 'lt' | 'eq' | 'gte' | 'lte' | 'ne'.
-%% Comparison operators, which can be one of the following:
-%% <ul>
-%%   <li><code>'gt'</code> - greater than</li>
-%%   <li><code>'lt'</code> - less than</li>
-%%   <li><code>'eq'</code> - equal to</li>
-%%   <li><code>'gte'</code> - greater than or equal to</li>
-%%   <li><code>'lte'</code> - less than or equal to</li>
-%%   <li><code>'ne'</code> - not equal to</li>
-%% </ul>
-
--type ydb_and() :: {[clause()]}.
-%% A list of clauses to be <code>and</code>ed together.
-
--type ydb_or() :: {[clause()]}.
-%% A list of clauses to be <code>or</code>ed together.
-
--type ydb_not() :: clause().
-%% A clause to be negated.
-
--type ydb_cv() :: {
-    Column :: atom()
-  , Operator :: compare()
-  , Value :: term()
-}.
-%% Compares a named column <code>Column</code> to <code>Value</code>
-%% with the comparison operator <code>Operator</code>.
-
--type ydb_cc() :: {
-    LeftCol :: atom()
-  , Operator :: compare()
-  , RightCol :: atom()
-}.
-%% Compares a column <code>LeftCol</code> to another column
-%% <code>RightCol</code> with the comparison operator
-%% <code>Operator</code>.
-
--type clause() :: ydb_cv() | ydb_cc() | ydb_and() | ydb_or() | ydb_not().
-%% A clause involving operations on columns.
 
 -record(select, {
     predicate :: clause()
