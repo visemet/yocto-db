@@ -360,6 +360,15 @@ init([Timestamp = {Unit, Name} | Options], State = #plan_node{})
     init(Options, State#plan_node{timestamp=Timestamp})
 ;
 
+init([{listen, PlanNode} | Options], State = #plan_node{})
+  when
+    is_pid(PlanNode)
+  ->
+    add_listener(PlanNode, erlang:self())
+
+  , init(Options, State)
+;
+
 init([Term | _Options], #plan_node{}) ->
     {error, {badarg, Term}}
 .
