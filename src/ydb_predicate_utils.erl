@@ -5,19 +5,24 @@
 %%      comparisons.
 -module(ydb_predicate_utils).
 
-% TODO remove
--export([is_satisfied/3,check_satisfied/3]).
--export([compare/3,get_value/3]).
+-export([is_satisfied/3]).
 
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
 
+% Testing for private functions.
+-ifdef(TEST).
+-export([check_satisfied/3]).
+-export([compare/3, get_value/3]).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 %% ----------------------------------------------------------------- %%
 
 -spec is_satisfied(
-    Tuple :: ydb_tuple()
-  , Schema :: ydb_schema()
-  , Predicate :: clause()
+    Tuple :: ydb_plan_node:ydb_tuple()
+  , Schema :: ydb_plan_node:ydb_schema()
+  , Predicate :: ydb_plan_node:ydb_clause()
 ) -> boolean().
 
 %% @doc Converts the schema to a dictionary for easier use. Passes it
@@ -27,9 +32,9 @@ is_satisfied(Tuple, Schema, Predicate) ->
 .
 
 -spec check_satisfied(
-    Tuple :: ydb_tuple()
+    Tuple :: ydb_plan_node:ydb_tuple()
   , Schema :: dict()
-  , Predicate :: clause()
+  , Predicate :: ydb_plan_node:ydb_clause()
 ) -> boolean().
 
 %% @doc Checks to see if the tuple of a particular schema is satisfied
@@ -87,7 +92,7 @@ check_satisfied(_Tuple, _Schema, _Predicate) -> false.
 
 -spec compare(
     LValue :: term()
-  , Operator :: compare()
+  , Operator :: ydb_plan_node:compare()
   , RValue :: term()
 ) -> boolean().
 
@@ -124,7 +129,7 @@ compare(_LValue, _Op, _RValue) ->
 %% ----------------------------------------------------------------- %%
 
 -spec get_value(
-    Tuple :: ydb_tuple()
+    Tuple :: ydb_plan_node:ydb_tuple()
   , Schema :: dict()
   , Col :: atom()
 ) ->
@@ -144,7 +149,6 @@ get_value(_Tuple = #ydb_tuple{data=Data}, Schema, Col) ->
 % TODO handle errors
 % TODO make sure only valid types are compared. i.e. not comparing strings
 % to an int?
-% TODO be able to compare timestamps
 
 
 %% ----------------------------------------------------------------- %%

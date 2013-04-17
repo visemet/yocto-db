@@ -20,6 +20,12 @@
   , acceptor :: pid()
 }).
 
+-type socket_input() :: #socket_input{
+    port_no :: integer()
+  , socket :: undefined | port()
+  , acceptor :: undefined | pid()}.
+%% Internal socket input node state.
+
 -type option() ::
     {port_no, PortNo :: integer()}.
 %% Options for the socket input:
@@ -62,7 +68,7 @@ start_link(Name, Args, Options) ->
 %% ----------------------------------------------------------------- %%
 
 -spec init(Args :: [option()]) ->
-    {ok, State :: #socket_input{}}
+    {ok, State :: socket_input()}
   | {error, {badarg, Term :: term()}}
 .
 
@@ -72,8 +78,8 @@ init(Args) when is_list(Args) -> init(Args, #socket_input{}).
 
 %% ----------------------------------------------------------------- %%
 
--spec delegate(Request :: atom(), State :: #socket_input{}) ->
-    {ok, State :: #socket_input{}}
+-spec delegate(Request :: atom(), State :: socket_input()) ->
+    {ok, State :: socket_input()}
 .
 
 %% @private
@@ -122,10 +128,10 @@ delegate(_Request, State) ->
 
 -spec delegate(
     Request :: atom()
-  , State :: #socket_input{}
+  , State :: socket_input()
   , Extras :: list()
 ) ->
-    {ok, NewState :: #socket_input{}}
+    {ok, NewState :: socket_input()}
 .
 
 %% @private
@@ -151,8 +157,8 @@ delegate(_Request, State, _Extras) ->
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
--spec init([option()], State :: #socket_input{}) ->
-    {ok, NewState :: #socket_input{}}
+-spec init([option()], State :: socket_input()) ->
+    {ok, NewState :: socket_input()}
   | {error, {badarg, Term :: term()}}
 .
 
@@ -174,7 +180,7 @@ init([Term | _Args], #socket_input{}) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec post_init(State :: #socket_input{}) -> State :: #socket_input{}.
+-spec post_init(State :: socket_input()) -> State :: socket_input().
 
 %% @private
 %% @doc Opens a socket at the specified port number and listens for

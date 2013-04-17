@@ -19,6 +19,12 @@
   , address :: term()
 }).
 
+-type socket_output() :: #socket_output{
+    port_no :: integer()
+  , socket :: undefined | port()
+  , address :: undefined | term()}.
+%% Internal socket output node state.
+
 -type option() ::
     {port_no, integer()}
   | {address, term()}.
@@ -48,7 +54,7 @@ start_link(Args, Options) ->
 %% ----------------------------------------------------------------- %%
 
 -spec init(Args :: [option()]) ->
-    {ok, State :: #socket_output{}}
+    {ok, State :: socket_output()}
   | {error, {badarg, Term :: term()}}
 .
 
@@ -58,7 +64,7 @@ init(Args) when is_list(Args) -> init(Args, #socket_output{}).
 
 %% ----------------------------------------------------------------- %%
 
--spec delegate(Request :: atom(), State :: #socket_output{}) ->
+-spec delegate(Request :: atom(), State :: socket_output()) ->
     {ok, State :: #socket_output{}}
 .
 
@@ -94,10 +100,10 @@ delegate(_Request, State) ->
 
 -spec delegate(
     Request :: atom()
-  , State :: #socket_output{}
+  , State :: socket_output()
   , Extras :: list()
 ) ->
-    {ok, NewState :: #socket_output{}}
+    {ok, NewState :: socket_output()}
 .
 
 %% @private
@@ -110,8 +116,8 @@ delegate(_Request, State, _Extras) ->
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
--spec init([option()], State :: #socket_output{}) ->
-    {ok, NewState :: #socket_output{}}
+-spec init([option()], State :: socket_output()) ->
+    {ok, NewState :: socket_output()}
   | {error, {badarg, Term :: term()}}
   | {error, Reason :: term()}
 .
@@ -137,8 +143,8 @@ init([Term | _Args], #socket_output{}) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec post_init(State :: #socket_output{}) ->
-    {ok, State :: #socket_output{}}
+-spec post_init(State :: socket_output()) ->
+    {ok, State :: socket_output()}
   | {error, Reason :: term()}
 .
 

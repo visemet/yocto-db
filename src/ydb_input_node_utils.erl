@@ -47,10 +47,10 @@ make_tuples(Timestamp, Schema, Data) when is_list(Data) ->
 
 -spec make_tuple(
     Timestamp :: {Unit :: atom(), Name :: atom()}
-  , Schema :: list()
+  , Schema :: ydb_plan_node:ydb_schema()
   , Data :: tuple()
 ) ->
-    Tuple :: #ydb_tuple{}
+    Tuple :: ydb_tuple()
 .
 
 %% @doc Makes a new tuple with a timestamp if not given.
@@ -75,10 +75,7 @@ make_tuple({Unit, Name}, Schema, Data)
 %% ----------------------------------------------------------------- %%
 
 -spec push
-    (Tuple :: #ydb_tuple{}) -> ok
-
-  ; (Tuples :: [#ydb_tuple{}]) -> ok
-.
+    (Tuple :: ydb_plan_node:ydb_tuple() | [ydb_plan_node:ydb_tuple()]) -> ok.
 
 %% @doc Pushes the tuple(s) to the listeners of the plan node. Defines
 %%      the way input streams are expected to serve data into the
@@ -102,7 +99,7 @@ push(Tuples) when is_list(Tuples) ->
 %%% =============================================================== %%%
 
 -spec new_tuple(Timestamp :: non_neg_integer(), Data :: tuple()) ->
-    Tuple :: #ydb_tuple{}
+    Tuple :: ydb_plan_node:ydb_tuple()
 .
 
 %% @private

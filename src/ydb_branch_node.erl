@@ -17,11 +17,17 @@
 -include("ydb_plan_node.hrl").
 
 -record(branch_node, {
-    schemas=[] :: [{atom(), ydb_schema()}]
-  , timestamps=[] :: [{atom(), ydb_timestamp()}]
+    schemas=[] :: [{atom(), ydb_plan_node:ydb_schema()}]
+  , timestamps=[] :: [{atom(), ydb_plan_node:ydb_timestamp()}]
 
   , listeners=[] :: [{atom(), set()}]
 }).
+
+-type branch_node() :: #branch_node{
+    schemas :: [{atom(), ydb_plan_node:ydb_schema()}]
+  , timestamps :: [{atom(), ydb_plan_node:ydb_timestamp()}]
+  , listeners :: [{atom(), set()}]}.
+%% Internal branch node state.
 
 %%% =============================================================== %%%
 %%%  API                                                            %%%
@@ -29,8 +35,8 @@
 
 -spec start_link(
     pid() | atom()
-  , [{atom(), ydb_schema()}]
-  , [{atom(), ydb_timestamp()}]
+  , [{atom(), ydb_plan_node:ydb_schema()}]
+  , [{atom(), ydb_plan_node:ydb_timestamp()}]
 ) ->
     {'ok', pid()}
   | {'error', term()}
@@ -86,11 +92,11 @@ remove_listener(PlanNode, Type, Subscriber)
 -spec init(
     Args :: {
         pid() | atom()
-      , [{atom(), ydb_schema()}]
-      , [{atom(), ydb_timestamp()}]
+      , [{atom(), ydb_plan_node:ydb_schema()}]
+      , [{atom(), ydb_plan_node:ydb_timestamp()}]
     }
 ) ->
-    {ok, #branch_node{}}
+    {ok, branch_node()}
   | {stop, term()}
 .
 
@@ -113,9 +119,9 @@ init({PlanNode, Schemas, Timestamps}) ->
 -spec handle_call(
     Request :: term()
   , From :: {pid(), Tag :: term()}
-  , State :: #branch_node{}
+  , State :: branch_node()
 ) ->
-    {reply, Reply :: term(), NewState :: #branch_node{}}
+    {reply, Reply :: term(), NewState :: branch_node()}
 .
 
 %% @doc Handles the request to subscribe a listener.
@@ -164,8 +170,8 @@ handle_call(_Request, _From, State) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec handle_cast(Request :: term(), State :: #branch_node{}) ->
-    {noreply, NewState :: #branch_node{}}
+-spec handle_cast(Request :: term(), State :: branch_node()) ->
+    {noreply, NewState :: branch_node()}
 .
 
 %% @doc Handles the request to notify listeners of a message. Handles
@@ -236,8 +242,8 @@ handle_cast(_Request, State) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec handle_info(Info :: timeout | term(), State :: #branch_node{}) ->
-    {noreply, NewState :: #branch_node{}}
+-spec handle_info(Info :: timeout | term(), State :: branch_node()) ->
+    {noreply, NewState :: branch_node()}
 .
 
 %% @doc Removes down subscribers as listeners. Passes info receieved
@@ -275,10 +281,9 @@ handle_info(_Info, State) ->
     {noreply, State}
 .
 
-
 %% ----------------------------------------------------------------- %%
 
--spec terminate(Reason :: term(), State :: #branch_node{}) -> ok.
+-spec terminate(Reason :: term(), State :: branch_node()) -> ok.
 
 %% @doc Called by a gen_server when it is about to terminate. Nothing
 %%      to clean up though.
@@ -286,10 +291,10 @@ terminate(_Reason, _State) -> ok.
 
 -spec code_change(
     OldVsn :: term()
-  , State :: #branch_node{}
+  , State :: branch_node()
   , Extra :: term()
 ) ->
-    {ok, NewState :: #branch_node{}}
+    {ok, NewState :: branch_node()}
 .
 
 %% @doc Called by a gen_server when it should update its internal state

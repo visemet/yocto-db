@@ -21,12 +21,17 @@
 %%% =============================================================== %%%
 
 -record(select, {
-    predicate :: clause()
-  , schema :: ydb_schema()
+    predicate :: ydb_plan_node:ydb_clause()
+  , schema :: ydb_plan_node:ydb_schema()
 }).
 
+-type select() :: #select{
+    predicate :: undefined | ydb_plan_node:ydb_clause()
+  , schema :: undefined | ydb_plan_node:ydb_schema()}.
+%% Internal select node state.
+
 -type option() ::
-    {predicate, Predicate :: clause()}.
+    {predicate, Predicate :: ydb_plan_node:ydb_clause()}.
 %% Options for the select node:
 %% <ul>
 %%   <li><code>{predicate, Predicate}</code> - Filters tuples based on
@@ -67,16 +72,18 @@ start_link(Name, Args, Options) ->
 %% ----------------------------------------------------------------- %%
 
 -spec init(Args :: [option()]) ->
-    {ok, State :: #select{}}
-  | {error, {badarg, Term :: term}}
+    {ok, State :: select()}
+  | {error, {badarg, Term :: term()}}
 .
 
 %% @private
 %% @doc Initializes the input node's internal state.
-init(Args) when is_list(Args) -> init(Args, #select{}).
+init(Args) when is_list(Args) -> init(Args, #select{});
 
--spec delegate(Request :: atom(), State :: #select{}) ->
-    {ok, State :: #select{}}
+init(_Args) -> {error, {badarg, not_options_list}}.
+
+-spec delegate(Request :: atom(), State :: select()) ->
+    {ok, State :: select()}
 .
 
 %% @private
@@ -110,10 +117,10 @@ delegate(_Request, State) ->
 
 -spec delegate(
     Request :: atom()
-  , State :: #select{}
+  , State :: select()
   , Extras :: list()
 ) ->
-    {ok, NewState :: #select{}}
+    {ok, NewState :: select()}
 .
 
 %% @private
@@ -131,8 +138,8 @@ delegate(_Request, State, _Extras) ->
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
--spec init([option()], State :: #select{}) ->
-    {ok, State :: #select{}}
+-spec init([option()], State :: select()) ->
+    {ok, State :: select()}
   | {error, {badarg, Term :: term()}}
 .
 
@@ -151,7 +158,7 @@ init([Term | _Args], #select{}) ->
     {error, {badarg, Term}}
 .
 
--spec post_init(State :: #select{}) -> {ok, NewState :: #select{}}.
+-spec post_init(State :: select()) -> {ok, NewState :: select()}.
 
 %% @private
 %% @doc Gets the schema for the tuples.
@@ -165,8 +172,8 @@ post_init(State = #select{}) ->
 .
 
 -spec check_tuple(
-    Tuple :: ydb_tuple()
-  , State :: #select{}
+    Tuple :: ydb_plan_node:ydb_tuple()
+  , State :: select()
 ) -> ok.
 
 %% @private

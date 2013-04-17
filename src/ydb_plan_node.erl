@@ -30,6 +30,14 @@
   , listeners=sets:new() :: set()
 }).
 
+-type plan_node() :: #plan_node{
+    type :: atom()
+  , schema :: ydb_schema()
+  , timestamp :: ydb_timestamp()
+  , wrapped :: term()
+  , listeners :: set()}.
+%% Internal plan node state.
+
 %%% =============================================================== %%%
 %%%  API                                                            %%%
 %%% =============================================================== %%%
@@ -127,7 +135,7 @@ relegate(PlanNode, Message, Extras)
 %% ----------------------------------------------------------------- %%
 
 -spec init(Args :: {atom(), term(), list()}) ->
-    {ok, #plan_node{}}
+    {ok, plan_node()}
   | {stop, term()}
 .
 
@@ -154,9 +162,9 @@ init({Type, Args, Options}) ->
 -spec handle_call(
     Request :: term()
   , From :: {pid(), Tag :: term()}
-  , State :: #plan_node{}
+  , State :: plan_node()
 ) ->
-    {reply, Reply :: term(), NewState :: #plan_node{}}
+    {reply, Reply :: term(), NewState :: plan_node()}
 .
 
 %% @doc Handles the request to subscribe a listener.
@@ -190,8 +198,8 @@ handle_call(_Request, _From, State) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec handle_cast(Request :: term(), State :: #plan_node{}) ->
-    {noreply, NewState :: #plan_node{}}
+-spec handle_cast(Request :: term(), State :: plan_node()) ->
+    {noreply, NewState :: plan_node()}
 .
 
 %% @doc Handles the request to notify listeners of a message. Handles
@@ -279,8 +287,8 @@ handle_cast(_Request, State) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec handle_info(Info :: timeout | term(), State :: #plan_node{}) ->
-    {noreply, NewState :: #plan_node{}}
+-spec handle_info(Info :: timeout | term(), State :: plan_node()) ->
+    {noreply, NewState :: plan_node()}
 .
 
 %% @doc Removes down subscribers as listeners. Passes info receieved
@@ -309,7 +317,7 @@ handle_info(Info, State = #plan_node{type = Type, wrapped = Wrapped}) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec terminate(Reason :: term(), State :: #plan_node{}) -> ok.
+-spec terminate(Reason :: term(), State :: plan_node()) -> ok.
 
 %% @doc Called by a gen_server when it is about to terminate. Nothing
 %%      to clean up though.
@@ -317,10 +325,10 @@ terminate(_Reason, _State) -> ok.
 
 -spec code_change(
     OldVsn :: term()
-  , State :: #plan_node{}
+  , State :: plan_node()
   , Extra :: term()
 ) ->
-    {ok, NewState :: #plan_node{}}
+    {ok, NewState :: plan_node()}
 .
 
 %% @doc Called by a gen_server when it should update its interal state
@@ -332,8 +340,8 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
--spec init(Options :: list(), State :: #plan_node{}) ->
-    {ok, NewState :: #plan_node{}}
+-spec init(Options :: list(), State :: plan_node()) ->
+    {ok, NewState :: plan_node()}
   | {error, {badarg, term()}}
 .
 

@@ -9,15 +9,13 @@
 -export([init/1, delegate/2, delegate/3]).
 
 %% @headerfile "ydb_plan_node.hrl"
--include_lib("ydb_plan_node.hrl").
+-include("ydb_plan_node.hrl").
 
 % Testing for private functions.
 -ifdef(TEST).
+-export([get_index/2]).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
-
-% TODO remove
--export([get_index/2]).
 
 %%% =============================================================== %%%
 %%%  internal records and types                                     %%%
@@ -28,6 +26,12 @@
   , include=true :: boolean()
   , schema :: dict()
 }).
+
+-type project() :: #project{
+    columns :: undefined | [atom() | {atom(), atom()}]
+  , include :: boolean()
+  , schema :: undefined | dict()}.
+%% Internal project node state.
 
 -type option() ::
     {columns, Columns :: [
@@ -83,16 +87,18 @@ start_link(Name, Args, Options) ->
 %% ----------------------------------------------------------------- %%
 
 -spec init(Args :: [option()]) ->
-    {ok, State :: #project{}}
-  | {error, {badarg, Term :: term}}
+    {ok, State :: project()}
+  | {error, {badarg, Term :: term()}}
 .
 
 %% @private
 %% @doc Initializes the input node's internal state.
-init(Args) when is_list(Args) -> init(Args, #project{}).
+init(Args) when is_list(Args) -> init(Args, #project{});
 
--spec delegate(Request :: atom(), State :: #project{}) ->
-    {ok, State :: #project{}}
+init(_Args) -> {error, {badarg, not_options_list}}.
+
+-spec delegate(Request :: atom(), State :: project()) ->
+    {ok, State :: project()}
 .
 
 %% @private
@@ -126,10 +132,10 @@ delegate(_Request, State) ->
 
 -spec delegate(
     Request :: atom()
-  , State :: #project{}
+  , State :: project()
   , Extras :: list()
 ) ->
-    {ok, NewState :: #project{}}
+    {ok, NewState :: project()}
 .
 
 %% @private
@@ -147,8 +153,8 @@ delegate(_Request, State, _Extras) ->
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
--spec init([option()], State :: #project{}) ->
-    {ok, State :: #project{}}
+-spec init([option()], State :: project()) ->
+    {ok, State :: project()}
   | {error, {badarg, Term :: term()}}
 .
 
@@ -167,7 +173,7 @@ init([Term | _Args], #project{}) ->
     {error, {badarg, Term}}
 .
 
--spec post_init(State :: #project{}) -> {ok, NewState :: #project{}}.
+-spec post_init(State :: project()) -> {ok, NewState :: project()}.
 
 %% @private
 %% @doc Gets the schema for the tuples.
@@ -181,8 +187,8 @@ post_init(State = #project{}) ->
 .
 
 -spec check_tuple(
-    Tuple :: #ydb_tuple{}
-  , State :: #project{}
+    Tuple :: ydb_plan_node:ydb_tuple()
+  , State :: project()
 ) -> ok.
 
 %% @private
@@ -201,7 +207,6 @@ check_tuple(
       , {tuple, NewTuple}
     )
 .
-% TODO handle timestamps
 
 -spec get_index(Column :: atom() | {atom(), atom()}, Schema :: dict()) ->
     Index :: integer()

@@ -22,6 +22,10 @@
     filename="out.dta" :: string()
 }).
 
+-type file_output() :: #file_output{
+    filename :: string()}.
+%% Internal file output node state.
+
 -type option() ::
     {filename, Filename :: string()}.
 %% Options for the file output:
@@ -48,16 +52,16 @@ start_link(Args, Options) ->
 %% ----------------------------------------------------------------- %%
 
 -spec init(Args :: [option()]) ->
-    {ok, State :: #file_output{}}
-  | {error, {badarg, Term :: term}}
+    {ok, State :: file_output()}
+  | {error, {badarg, Term :: term()}}
 .
 
 %% @private
 %% @doc Initializes the output node's internal state.
 init(Args) when is_list(Args) -> init(Args, #file_output{}).
 
--spec delegate(Request :: atom(), State :: #file_output{}) ->
-    {ok, State :: #file_output{}}
+-spec delegate(Request :: atom(), State :: file_output()) ->
+    {ok, State :: file_output()}
 .
 
 %% @private
@@ -91,10 +95,10 @@ delegate(_Request, State) ->
 
 -spec delegate(
     Request :: atom()
-  , State :: #file_output{}
+  , State :: file_output()
   , Extras :: list()
 ) ->
-    {ok, NewState :: #file_output{}}
+    {ok, NewState :: file_output()}
 .
 
 %% @private
@@ -108,8 +112,8 @@ delegate(_Request, State, _Extras) ->
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
--spec init([option()], State :: #file_output{}) ->
-    {ok, State :: #file_output{}}
+-spec init([option()], State :: file_output()) ->
+    {ok, State :: file_output()}
   | {error, {badarg, Term :: term()}}
 .
 
@@ -152,7 +156,7 @@ close(IoDevice) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec write(Filename :: string(), Data :: ydb_tuple() | list()) -> ok.
+-spec write(Filename :: string(), Data :: ydb_plan_node:ydb_tuple() | list()) -> ok.
 
 %% @private
 %% @doc Writes tuples to a file. Flushes the output by opening and

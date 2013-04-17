@@ -22,6 +22,12 @@
   , poke_freq=1 :: integer()
 }).
 
+-type file_input() :: #file_input{
+    io_device :: undefined | file:io_device()
+  , batch_size :: integer()
+  , poke_freq :: integer()}.
+% Internal file input node state.
+    
 -type option() ::
     {filename, Filename :: string()}
   | {batch_size, BatchSize :: integer()}
@@ -79,15 +85,17 @@ do_read(Pid) when is_pid(Pid) ->
 
 -spec init(Args :: [option()]) ->
     {ok, State :: #file_input{}}
-  | {error, {badarg, Term :: term}}
+  | {error, {badarg, Term :: term()}}
 .
 
 %% @private
 %% @doc Initializes the input node's internal state.
-init(Args) when is_list(Args) -> init(Args, #file_input{}).
+init(Args) when is_list(Args) -> init(Args, #file_input{});
 
--spec delegate(Request :: atom(), State :: #file_input{}) ->
-    {ok, State :: #file_input{}}
+init(_Args) -> {error, {badarg, not_options_list}}.
+
+-spec delegate(Request :: atom(), State :: file_input()) ->
+    {ok, State :: file_input()}
 .
 
 %% @private
@@ -110,10 +118,10 @@ delegate(_Request, State) ->
 
 -spec delegate(
     Request :: atom()
-  , State :: #file_input{}
+  , State :: file_input()
   , Extras :: list()
 ) ->
-    {ok, State :: #file_input{}}
+    {ok, State :: file_input()}
 .
 
 %% @private
@@ -171,8 +179,8 @@ delegate(_Request, State, _Extras) ->
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
--spec init([option()], State :: #file_input{}) ->
-    {ok, State :: #file_input{}}
+-spec init([option()], State :: file_input()) ->
+    {ok, State :: file_input()}
   | {error, {badarg, Term :: term()}}
 .
 
