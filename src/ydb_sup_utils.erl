@@ -1,10 +1,25 @@
 -module(ydb_sup_utils).
 
--export([get_pid/2]).
+-export([pid_fun/1, get_pid/2]).
 
 %%% =============================================================== %%%
 %%%  API                                                            %%%
 %%% =============================================================== %%%
+
+-spec pid_fun(
+    ChildId :: atom() % supervisor:child_id()
+) ->
+    fun(() -> ChildPid :: pid())
+.
+
+%% @doc TODO
+pid_fun(ChildId) when is_atom(ChildId) ->
+    SupRef = erlang:self()
+
+  , fun() ->
+        get_pid(SupRef, ChildId)
+    end
+.
 
 -spec get_pid(
     SupRef :: pid() % supervisor:sup_ref()
