@@ -65,7 +65,7 @@ IO Definitions
         child_node
       , port_no :: integer()
       , socket :: port()
-      , acceptor :: pid
+      , acceptor :: pid()
     }
     
 ### Socket Output
@@ -88,7 +88,7 @@ results.
 
 ### Select
 
-    {ydb_select, child_node, predicate :: clause()}
+    {ydb_select, child_node, predicate :: ydb_clause()}
 
 ### Project
 
@@ -100,7 +100,7 @@ column {atom(), atom()}.
     
 ### Joins
    
-    {ydb_join_node, left_node, right_node, predicate :: clause()}
+    {ydb_join_node, left_node, right_node, predicate :: ydb_clause()}
     
 ### Set Union
 
@@ -115,11 +115,11 @@ Predicate Format
 
 ### Boolean Operators
 
-    {ydb_and, clauses :: [clause()]}
-    {ydb_or, clauses :: [clause()]}
-    {ydb_not, clause :: clause()}
+    {ydb_and, clauses :: [ydb_clause()]}
+    {ydb_or, clauses :: [ydb_clause()]}
+    {ydb_not, clause :: ydb_clause()}
 
-    clause() :: {ydb_cv} | {ydb_cc} | {ydb_and} | {ydb_or} | {ydb_not}
+    ydb_clause() :: #ydb_cv{} | #ydb_cc{} | #ydb_and{} | #ydb_or{} | #ydb_not{}
 
 ### Comparison Operators
 
