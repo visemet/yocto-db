@@ -22,14 +22,24 @@ start_link() ->
 
 %% @doc TODO
 register_input_stream(Spec) ->
-    ydb_input_stream_sup:register(?INPUT_STREAM_SUP, Spec)
+    SupRef = ydb_sup_utils:get_pid(
+        erlang:whereis(ydb)
+      , ?INPUT_STREAM_SUP
+    )
+
+  , ydb_input_stream_sup:register(SupRef, Spec)
 .
 
 %-spec
 
 %% @doc TODO
 register_query(Spec) ->
-    ydb_query_sup:register(?QUERY_SUP, Spec)
+    SupRef = ydb_sup_utils:get_pid(
+        erlang:whereis(ydb)
+      , ?QUERY_SUP
+    )
+
+  , ydb_query_sup:register(SupRef, Spec)
 .
 
 %% ----------------------------------------------------------------- %%
@@ -44,7 +54,7 @@ init({}) ->
       , [
             {
                 ?INPUT_STREAM_SUP
-              , {?INPUT_STREAM_SUP, start_link, [?INPUT_STREAM_SUP]}
+              , {?INPUT_STREAM_SUP, start_link, []}
               , transient
               , infinity % supervisor
               , supervisor
@@ -53,7 +63,7 @@ init({}) ->
 
           , {
                 ?QUERY_SUP
-              , {?QUERY_SUP, start_link, [?QUERY_SUP]}
+              , {?QUERY_SUP, start_link, []}
               , transient
               , infinity % supervisor
               , supervisor

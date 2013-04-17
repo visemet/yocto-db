@@ -4,7 +4,7 @@
 -module(ydb_input_stream_sup).
 -behaviour(supervisor).
 
--export([start_link/0, start_link/1, register/2]).
+-export([start_link/0, register/2]).
 -export([init/1]).
 
 %%% =============================================================== %%%
@@ -21,16 +21,9 @@ start_link() ->
 %-spec TODO
 
 %% @doc TODO
-start_link(Name) ->
-    supervisor:start_link(Name, ?MODULE, {})
-.
-
-%-spec TODO
-
-%% @doc TODO
-register(Supervisor, {Name, Type, Args, Options, Schemas, Timestamps}) ->
+register(SupRef, {Name, Type, Args, Options, Schemas, Timestamps}) ->
     supervisor:start_child(
-        Supervisor
+        SupRef
 
       , {
             Name
