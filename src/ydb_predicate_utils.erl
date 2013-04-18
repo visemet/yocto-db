@@ -12,8 +12,8 @@
 
 % Testing for private functions.
 -ifdef(TEST).
--export([check_satisfied/3]).
--export([compare/3, get_value/3]).
+-export([check_satisfied/3, compare_types/3, compare/3, get_value/3]).
+-export([is_same_type/2]).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
@@ -39,7 +39,6 @@ is_satisfied(Tuple, Schema, Predicate) ->
 
 %% @doc Checks to see if the tuple of a particular schema is satisfied
 %%      by the predicate.
-
 check_satisfied(Tuple, Schema, #ydb_and{clauses=Clauses}) ->
     BooleanClauses = lists:map(fun(Clause) ->
         check_satisfied(Tuple, Schema, Clause) end, Clauses
@@ -71,7 +70,7 @@ check_satisfied(
   , _Query = #ydb_cv{column=Col, operator=Op, value=Value}
 ) ->
     ActualValue = get_value(Tuple, Schema, Col)
-  , compare(ActualValue, Op, Value)
+  , compare_types(ActualValue, Op, Value)
 ;
 
 check_satisfied(
@@ -83,12 +82,51 @@ check_satisfied(
         get_value(Tuple, Schema, Left)
       , get_value(Tuple, Schema, Right)
     }
-  , compare(LValue, Op, RValue)
+  , compare_types(LValue, Op, RValue)
 ;
 
 check_satisfied(_Tuple, _Schema, _Predicate) -> false.
 
 %% ----------------------------------------------------------------- %%
+
+-spec compare_types(
+    LValue :: term()
+  , Pperator :: ydb_plan_node:compare()
+  , RValue :: term()
+) -> boolean().
+
+%% @doc Makes sure that the values being compared are of similar types.
+compare_types(LValue, Operator, RValue) ->
+    SameType = is_same_type(LValue, RValue)
+  , if
+        SameType ->
+            compare(LValue, Operator, RValue)
+      ; true ->
+            erlang:error(incompatible_type_comparisons)
+    end
+.
+
+-spec is_same_type(
+    LValue :: term()
+  , RValue :: term()
+) -> boolean().
+
+%% @doc Compares the types of two values and sees if they are equal.
+is_same_type(LValue, RValue)
+  when
+      (is_integer(LValue) orelse is_float(LValue))
+    , (is_integer(RValue) orelse is_float(RValue))
+->
+    true
+;
+
+is_same_type(LValue, RValue) ->
+    SameType = (is_atom(LValue) orelse io_lib:printable_list(LValue)) and
+               (is_atom(RValue) orelse io_lib:printable_list(RValue))
+  , if SameType -> true
+        ; true -> false
+    end
+.
 
 -spec compare(
     LValue :: term()
@@ -142,13 +180,9 @@ get_value(_Tuple = #ydb_tuple{data=Data}, Schema, Col) ->
         {ok, {Index, _Type}} ->
             Val = element(Index, Data)
           , Val
-      ; error -> error
+      % If the column cannot be found.
+      ; error -> erlang:error(unknown_column)
     end
 .
-
-% TODO handle errors
-% TODO make sure only valid types are compared. i.e. not comparing strings
-% to an int?
-
 
 %% ----------------------------------------------------------------- %%
