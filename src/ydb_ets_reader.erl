@@ -5,10 +5,9 @@
 -module(ydb_ets_reader).
 -behaviour(gen_server).
 
-
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
--export([start_link/3, start_link/4, copy_table/1, get_data/2,
+-export([start_link/3, start_link/4, get_copy/2, get_data_stream/2,
     add_tuples/2, delete_table/1]).
 -export([coalesce/0, slide_window/0]).
 
@@ -69,22 +68,22 @@ start_link(Name, Type, Args, Options) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec copy_table(Pid :: pid()) -> {ok, Tid :: ets:tid()}.
+-spec get_copy(Pid :: pid(), Name :: atom()) -> {ok, Tid :: ets:tid()}.
 
 %% @doc Creates a copy of all the tuples in this table and returns
 %%      a reference to the new table.
-copy_table(Pid) ->
-    gen_server:call(Pid, {copy_table})
+get_copy(Pid, Name) ->
+    gen_server:call(Pid, {get_copy, Name})
 .
 
 %% ----------------------------------------------------------------- %%
 
--spec get_data(Pid :: pid(), ReturnPid :: pid()) -> ok.
+-spec get_data_stream(Pid :: pid(), ReturnPid :: pid()) -> ok.
 
 %% @doc Sends out all the current data, after applying any inserts and
 %%      deletes, to ReqPid
-get_data(Pid, ReqPid) ->
-    gen_server:cast(Pid,{get_data, ReqPid})
+get_data_stream(Pid, ReqPid) ->
+    gen_server:cast(Pid,{get_data_stream, ReqPid})
 .
 
 %% ----------------------------------------------------------------- %%
@@ -136,9 +135,9 @@ init({_Type, _Args, Options}) ->
 %% @doc TODO
 
 % returns a copy of the current table
-handle_call({copy_table}, _From, State = #ets_reader{}) ->
-    {ok, Tid} = do_copy_table()
-  , {reply, Tid, State}
+handle_call({get_copy, Name}, _From, State = #ets_reader{table=Tid}) ->
+    {ok, NewTid} = do_copy_table(Tid, Name)
+  , {reply, {ok, NewTid}, State}
 ;
 
 handle_call(_Request, _From, State) ->
@@ -154,20 +153,23 @@ handle_call(_Request, _From, State) ->
 %% @doc TODO
 
 % adds tuples to the table
-handle_cast({add_tuples, Tuples}, State = #ets_reader{count=Count}) ->
-    {ok, NewCount} = do_add_tuples(Tuples, Count)
+handle_cast(
+    {add_tuples, Tuples}
+  , State = #ets_reader{count=Count, table=Tid, row_type=RowType}
+) ->
+    {ok, NewCount} = do_add_tuples(Tuples, Count, RowType, Tid)
   , {noreply, State#ets_reader{count=NewCount}}
 ;
 
 % sends data to the requesting pid
-handle_cast({get_data, ReqPid}, State = #ets_reader{}) ->
-    do_get_data(ReqPid)
+handle_cast({get_data_stream, ReqPid}, State = #ets_reader{table=Tid}) ->
+    do_get_data_stream(ReqPid, Tid)
   , {noreply, State}
 ;
 
 % deletes the table
-handle_cast({delete_table}, State = #ets_reader{}) ->
-    do_delete_table()
+handle_cast({delete_table}, State = #ets_reader{table=Tid}) ->
+    do_delete_table(Tid)
   , {noreply, State}
 ;
 
@@ -252,12 +254,13 @@ post_init(State = #ets_reader{table_name=Name}) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec do_delete_table() -> ok.
+-spec do_delete_table(Tid :: ets:tid()) -> ok.
 
 %% @private
 %% @doc Deletes the ets table.
-do_delete_table() ->
-    {ok}
+do_delete_table(Tid) ->
+    ets:delete(Tid)
+  , ok
 .
 
 %% ----------------------------------------------------------------- %%
@@ -265,34 +268,60 @@ do_delete_table() ->
 -spec do_add_tuples(
     Tuple :: [tuple()]
   , Count :: integer()
+  , RowType :: atom()
+  , Tid :: ets:tid()
 ) ->
     {ok, NewCount :: integer()}.
 
+%% tuple should be {Type, TS, Data}
+
 %% @private
 %% @doc Adds a new tuple to the ets table.
-do_add_tuples(_Tuple, Count) ->
+do_add_tuples([], Count, _RowType, _Tid) ->
     {ok, Count}
+;
+
+do_add_tuples(
+    [_Tuple = {Type, Timestamp, Data} | Tuples]
+  , Count
+  , RowType
+  , Tid
+) ->
+    ets:insert(Tid, {{RowType, Count}, Type, Timestamp, Data})
+  , do_add_tuples(Tuples, Count + 1, RowType, Tid)
 .
 
 %% ----------------------------------------------------------------- %%
 
--spec do_copy_table() -> {ok, Tid :: ets:tid()}.
+-spec do_copy_table(
+    Tid :: ets:tid()
+  , Name :: atom()
+) ->
+    {ok, Tid :: ets:tid()}.
 
 %% @private
-%% @doc Returns a copy of the table.
-do_copy_table() ->
-    {ok, undefined}
+%% @doc Returns a complete copy of the table.
+do_copy_table(Tid, Name) ->
+    NewTid = ets:new(Name, [])
+  , Tuples = ets:match_object(Tid, '_')
+  , ets:insert(NewTid, Tuples)
+  , {ok, NewTid}
 .
+
+
 
 %% ----------------------------------------------------------------- %%
 
--spec do_get_data(ReqPid :: pid()) -> {ok}.
+-spec do_get_data_stream(ReqPid :: pid(), Tid :: ets:tid()) -> {ok}.
 
 %% @private
 %% @doc Sends all the tuples as a stream to the requesting
 %%      processes, after applying all edits (additions/deletions).
-do_get_data(_ReqPid) ->
-    {ok}
+do_get_data_stream(ReqPid, Tid) ->
+    Tuples = lists:map(fun(X) -> list_to_tuple(X) end,
+                       ets:match(Tid, {'_', '$1', '$2', '$3'}))
+  , ReqPid ! {tuples, Tuples}
+  , {ok}
 .
 
 %% ----------------------------------------------------------------- %%
@@ -302,7 +331,7 @@ do_get_data(_ReqPid) ->
 %% @private
 %% @doc Creates a new ets table with the given name.
 create_table(Name) ->
-    Tid = ets:new(Name, [])
+    Tid = ets:new(Name, []) % TODO add options
   , {ok, Tid}
 .
 
@@ -313,6 +342,7 @@ create_table(Name) ->
 %% @private
 %% @doc Applies all additions and deletions to the table.
 coalesce() ->
+    % TODO IMPLEMENT
     {ok}
 .
 
@@ -323,6 +353,7 @@ coalesce() ->
 %% @private
 %% @doc Inserts "delete" tuples to simulate sliding the window.
 slide_window() ->
+    % TODO IMPLEMENT
     {ok}
 .
 
