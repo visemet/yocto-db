@@ -47,6 +47,14 @@
   | {error, Reason :: term()}
 .
 
+-callback compute_schema(
+    InputSchemas :: [ydb_schema()]
+  , State :: term()
+) ->
+    {ok, OutputSchema :: ydb_schema()}
+  | {error, Reason :: term()}
+.
+
 -callback delegate(Message :: term(), State :: term()) ->
     {ok, NewState :: term()}
   | {error, Reason :: term()}
