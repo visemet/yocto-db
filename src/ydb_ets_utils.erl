@@ -9,8 +9,14 @@
 
 -export([get_copy/2, combine_partial_results/2, add_tuples/3,
     delete_table/1, create_table/1, dump_raw/1, dump_tuples/1,
-    apply_diffs/2]).
+    apply_diffs/2, add_diffs/4]).
 
+
+%%% =============================================================== %%%
+%%%  internal records and types                                     %%%
+%%% =============================================================== %%%
+
+-type diff() :: '+' | '-'.
 
 %%% =============================================================== %%%
 %%%  API                                                            %%%
@@ -118,13 +124,59 @@ combine_partial_results(Tids, NewName) ->
 
 -spec apply_diffs(
     BaseTid :: ets:tid()
-  , DiffTids :: [ets:tid()]
+  , DiffTidOrTids :: ets:tid() | [ets:tid()]
 ) ->
-    {ok}.
+    {ok}
+.
 
 %% @doc Applies the diffs in the specified table to the base table.
-apply_diffs(_BaseTid, _DiffTids) ->
-    {ok} %TODO implement
+apply_diffs(BaseTid, DiffTids) when is_list(DiffTids) ->
+    % The MatchSpecs below are produced with the following commands:
+    %   InsSpec = ets:fun2ms(fun ({{'+', Op, Timestamp}, Tuple}) ->
+    %                   {{Op, Timestamp}, Tuple} end)
+    %   DelSpec = ets:fun2ms(fun ({{'-', Op, Timestamp}, Tuple}) ->
+    %                   {{Op, Timestamp}, Tuple} end)
+
+    InsSpec = [{{{'+','$1','$2'},'$3'},[],[{{{{'$1','$2'}},'$3'}}]}]
+  , Inserts = lists:flatten(
+        lists:map(fun(X) -> ets:select(X, InsSpec) end, DiffTids))
+  , ets:insert(BaseTid, Inserts)
+  , DelSpec = [{{{'-','$1','$2'},'$3'},[],[{{{{'$1','$2'}},'$3'}}]}]
+  , Deletes = lists:flatten(
+        lists:map(fun(X) -> ets:select(X, DelSpec) end, DiffTids))
+  , lists:foreach(fun(X) -> ets:delete_object(BaseTid, X) end, Deletes)
+  , {ok}
+;
+apply_diffs(BaseTid, DiffTid) ->
+    apply_diffs(BaseTid, [DiffTid])
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec add_diffs(
+    Tid :: ets:tid()
+  , Diff :: diff()
+  , Op :: atom()
+  , TupleOrTuples :: ydb_tuple() | [ydb_tuple()]
+) ->
+    {ok}
+.
+
+%% @doc Adds a diff to the specified table, using {Diff, Op, Timestamp}
+%%      as the key.
+add_diffs(
+    Tid
+  , Diff
+  , Op
+  , Tuple=#ydb_tuple{timestamp=Timestamp}
+) when is_tuple(Tuple) ->
+    ets:insert(Tid, {{Diff, Op, Timestamp}, Tuple})
+  , {ok}
+;
+
+add_diffs(Tid, Diff, Op, Tuples) when is_list(Tuples) ->
+    lists:foreach(fun(X) -> add_diffs(Tid, Diff, Op, X) end, Tuples)
+  , {ok}
 .
 
 %%% =============================================================== %%%
@@ -133,10 +185,10 @@ apply_diffs(_BaseTid, _DiffTids) ->
 
 %% @doc Takes in a list of tuples and adds a relation key to the front
 %%      of each tuple in the list. Converts tuples as follows:
-%%      ydb_tuple -> {{'row_no', Count}, ydb_tuple}, where Count is
+%%      ydb_tuple -> {{'row_num', Count}, ydb_tuple}, where Count is
 %%      a monotomically increasing integer.
 -spec create_relation_tuples(
-    Tuples :: [tuple()]
+    Tuples :: [ydb_tuple()]
   , Start :: integer()
 ) ->
     [tuple()].
