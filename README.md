@@ -149,13 +149,13 @@ Table Formats
 
 Rows in ETS tables are represented as tuples. All the rows in a
 given ETS table should be in the same format, which will be one
-of the following.
+of the following:
 
 ### Relation Table
 
     ydb_rel_tuple() :: {
         {'row_num', RowNum :: non_neg_integer()}
-    , Tuple :: ydb_tuple()
+        , Tuple :: ydb_tuple()
     }.
 
 RowNum serves as a unique id for each row.
@@ -164,7 +164,7 @@ RowNum serves as a unique id for each row.
 
     ydb_syn_tuple() :: {
         {Op :: atom(), Timestamp :: non_neg_integer()}
-    , Tuple :: ydb_tuple()
+        , Tuple :: ydb_tuple()
     }.
 
 Op is the name of the aggregate (e.g. 'sum' or 'count').
@@ -173,7 +173,7 @@ Op is the name of the aggregate (e.g. 'sum' or 'count').
 
     ydb_diff_tuple() :: {
         {Diff :: diff(), Op :: atom(), Timestamp :: non_neg_integer()}
-    , Tuple :: ydb_tuple()
+        , Tuple :: ydb_tuple()
     }.
 
 Op is the name of the aggregate, as above (e.g. 'sum' or count').
