@@ -184,7 +184,11 @@ handle_call(
             % Add `{Subscriber, Ref}' to the set of listeners
           , NewListeners = sets:add_element({Subscriber, Ref}, Listeners)
 
-          , {reply, ok, State#plan_node{listeners=NewListeners}}
+          , {
+                reply
+              , {ok, State#plan_node.schema}
+              , State#plan_node{listeners=NewListeners}
+            }
 
         % `Subscriber' is already a listener
       ; Ref when is_reference(Ref) ->
