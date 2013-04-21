@@ -17,15 +17,15 @@
 -include("ydb_plan_node.hrl").
 
 -record(branch_node, {
-    schemas=[] :: [{atom(), ydb_plan_node:ydb_schema()}]
-  , timestamps=[] :: [{atom(), ydb_plan_node:ydb_timestamp()}]
+    schemas=[] :: [{atom(), ydb_schema()}]
+  , timestamps=[] :: [{atom(), ydb_timestamp()}]
 
   , listeners=[] :: [{atom(), set()}]
 }).
 
 -type branch_node() :: #branch_node{
-    schemas :: [{atom(), ydb_plan_node:ydb_schema()}]
-  , timestamps :: [{atom(), ydb_plan_node:ydb_timestamp()}]
+    schemas :: [{atom(), ydb_schema()}]
+  , timestamps :: [{atom(), ydb_timestamp()}]
   , listeners :: [{atom(), set()}]}.
 %% Internal branch node state.
 
@@ -35,8 +35,8 @@
 
 -spec start_link(
     pid() | atom()
-  , [{atom(), ydb_plan_node:ydb_schema()}]
-  , [{atom(), ydb_plan_node:ydb_timestamp()}]
+  , [{atom(), ydb_schema()}]
+  , [{atom(), ydb_timestamp()}]
 ) ->
     {'ok', pid()}
   | {'error', term()}
@@ -92,8 +92,8 @@ remove_listener(PlanNode, Type, Subscriber)
 -spec init(
     Args :: {
         pid() | atom()
-      , [{atom(), ydb_plan_node:ydb_schema()}]
-      , [{atom(), ydb_plan_node:ydb_timestamp()}]
+      , [{atom(), ydb_schema()}]
+      , [{atom(), ydb_timestamp()}]
     }
 ) ->
     {ok, branch_node()}
