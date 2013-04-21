@@ -99,7 +99,10 @@ notify(PlanNode, Message) when is_pid(PlanNode) ->
     gen_server:cast(PlanNode, {notify, Message})
 .
 
--spec add_listener(pid(), pid()) -> ok | {error, already_subscribed}.
+-spec add_listener(pid(), pid()) ->
+    {ok, ydb_schema()}
+  | {error, already_subscribed}
+.
 
 %% @doc Adds the subscriber as a listener to the plan node.
 add_listener(PlanNode, Subscriber)
@@ -380,13 +383,36 @@ init([Timestamp = {Unit, Name} | Options], State = #plan_node{})
     init(Options, State#plan_node{timestamp=Timestamp})
 ;
 
-init([{listen, PlanNode} | Options], State = #plan_node{})
-  when
-    is_pid(PlanNode)
+init(
+    [{listen, PlanNodes} | Options]
+  , State = #plan_node{
+        type = Type
+      , wrapped = Wrapped
+    }
+) when
+    is_list(PlanNodes)
   ->
-    add_listener(PlanNode, erlang:self())
+    case Type:compute_schema(
+        lists:map(
+            fun(PlanNode) when is_pid(PlanNode) ->
+                case add_listener(PlanNode, erlang:self()) of
+                    {ok, Schema} -> Schema
 
-  , init(Options, State)
+                  ; {error, already_subscribed} -> []
+                end
+            end
+
+          , PlanNodes
+        )
+
+      , Wrapped
+    ) of
+        {ok, Schema} ->
+            init(Options, State#plan_node{schema=Schema})
+
+      ; {error, Reason} ->
+            {error, Reason}
+    end
 ;
 
 init([Term | _Options], #plan_node{}) ->
