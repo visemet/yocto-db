@@ -132,9 +132,9 @@ combine_partial_results(Tids, NewName) ->
 apply_diffs(BaseTid, DiffTids) when is_list(DiffTids) ->
     % The MatchSpecs below are produced with the following commands:
     %   InsSpec = ets:fun2ms(fun ({{'+', Op, Timestamp}, Tuple}) ->
-    %                   {{Op, Timestamp}, Tuple} end)
+    %                   {{Op, Timestamp}, Tuple} end).
     %   DelSpec = ets:fun2ms(fun ({{'-', Op, Timestamp}, Tuple}) ->
-    %                   {{Op, Timestamp}, Tuple} end)
+    %                   {{Op, Timestamp}, Tuple} end).
 
     InsSpec = [{{{'+','$1','$2'},'$3'},[],[{{{{'$1','$2'}},'$3'}}]}]
   , Inserts = lists:flatten(

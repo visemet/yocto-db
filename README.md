@@ -15,13 +15,13 @@ Test
 
     rebar eunit
 
-    
+
 Documentation
 -------------
 
     rebar doc
-    
-    
+
+
 Supervisor Hierarchy
 --------------------
 
@@ -54,11 +54,11 @@ IO Definitions
       , batch_size :: integer()
       , poke_freq :: integer()
     }
-    
+
 ### File Output
 
     {ydb_file_output, child_node, filename :: string()}
-    
+
 ### Socket Input
 
     {ydb_socket_input,
@@ -67,7 +67,7 @@ IO Definitions
       , socket :: port()
       , acceptor :: pid()
     }
-    
+
 ### Socket Output
 
     {ydb_socket_output,
@@ -76,7 +76,7 @@ IO Definitions
       , socket :: port()
       , address :: term()
     }
-    
+
 
 Query Definitions
 -----------------
@@ -97,17 +97,17 @@ a tuple containing the current column name and the new name for the
 column {atom(), atom()}.
 
     {ydb_project, child_node, columns :: [atom() | {atom(), atom()}]}
-    
+
 ### Joins
-   
+
     {ydb_join_node, left_node, right_node, predicate :: ydb_clause()}
-    
+
 ### Set Union
 
     {ydb_union_node, left_node, right_node}
-    
+
 ### Set Difference
- 
+
     {ydb_diff_node, left_node, right_node}
 
 Predicate Format
@@ -130,7 +130,7 @@ Comparing a column to a value.
       , operator :: compare()
       , value :: term()
     }
-    
+
 Comparing two columns together.
 
     {ydb_cc,
@@ -143,3 +143,40 @@ Comparison operators.
 
     compare() :: 'gt'  | 'lt'  | 'eq'
                | 'lte' | 'gte' | 'ne'
+
+Table Formats
+-------------
+
+Rows in ETS tables are represented as tuples. All the rows in a
+given ETS table should be in the same format, which will be one
+of the following.
+
+### Relation Table
+
+    ydb_rel_tuple() :: {
+        {'row_num', RowNum :: non_neg_integer()}
+    , Tuple :: ydb_tuple()
+    }.
+
+RowNum serves as a unique id for each row.
+
+### Synopsis Table
+
+    ydb_syn_tuple() :: {
+        {Op :: atom(), Timestamp :: non_neg_integer()}
+    , Tuple :: ydb_tuple()
+    }.
+
+Op is the name of the aggregate (e.g. 'sum' or 'count').
+
+### Diff Table
+
+    ydb_diff_tuple() :: {
+        {Diff :: diff(), Op :: atom(), Timestamp :: non_neg_integer()}
+    , Tuple :: ydb_tuple()
+    }.
+
+Op is the name of the aggregate, as above (e.g. 'sum' or count').
+Diff indicates whether the tuple is to be inserted or deleted.
+
+    diff() :: '+' | '-'.
