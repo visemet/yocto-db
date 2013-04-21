@@ -6,7 +6,7 @@
 -behaviour(ydb_plan_node).
 
 -export([start_link/2, start_link/3]).
--export([init/1, delegate/2, delegate/3]).
+-export([init/1, delegate/2, delegate/3, compute_schema/2]).
 
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
@@ -132,6 +132,26 @@ delegate(_Request = {get_schema}, State, _Extras = [Schema, _Timestamp]) ->
 
 delegate(_Request, State, _Extras) ->
     {ok, State}
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec compute_schema(
+    InputSchemas :: [ydb_plan_node:ydb_schema()]
+  , State :: select()
+) ->
+    {ok, OutputSchema :: ydb_plan_node:ydb_schema()}
+  | {error, {badarg, InputSchemas :: [ydb_plan_node:ydb_schema()]}}
+.
+
+%% @doc Returns the output schema of the select node based upon the
+%%      supplied input schemas. Expects a single schema.
+compute_schema([Schema], #select{}) ->
+    {ok, Schema}
+;
+
+compute_schema(Schemas, #select{}) ->
+    {error, {badarg, Schemas}}
 .
 
 %%% =============================================================== %%%
