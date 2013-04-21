@@ -33,8 +33,8 @@
 -type ets_reader() :: #ets_reader{
     table_name :: atom()
   , row_type   :: atom()
-  , table      :: ets:tid()
-  , count      :: integer()}.
+  , table      :: undefined | ets:tid()
+  , count      :: undefined | integer()}.
 
 -type option() ::
     {table_name, atom()}
@@ -307,8 +307,6 @@ do_copy_table(Tid, Name) ->
   , ets:insert(NewTid, Tuples)
   , {ok, NewTid}
 .
-
-
 
 %% ----------------------------------------------------------------- %%
 
