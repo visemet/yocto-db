@@ -186,6 +186,7 @@ check_tuple(Tuple, _State=#select{predicate=Predicate, schema=Schema}) ->
             erlang:self()
           , {tuple, Tuple}
         )
+      ; true -> ok
     end
 .
 

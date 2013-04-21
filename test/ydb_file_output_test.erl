@@ -67,6 +67,6 @@ write_test_helper(Pid) ->
           , {ydb_tuple, _Timestamp3, {3}}
         ]} ->
             Pid ! test_passed
-      ; _Other -> Pid ! test_passed
+      ; _Other -> Pid ! fail
     end
 .
