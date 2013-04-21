@@ -7,10 +7,9 @@
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
 
--export([get_copy/2, combine_partial_results/2, add_tuples/3,
-    delete_table/1, create_table/1, dump_raw/1, dump_tuples/1,
-    apply_diffs/2, add_diffs/4]).
-
+-export([create_table/1, delete_table/1, add_tuples/3, get_copy/2,
+    combine_partial_results/2, apply_diffs/2, add_diffs/4, dump_raw/1,
+    dump_tuples/1]).
 
 %%% =============================================================== %%%
 %%%  internal records and types                                     %%%
@@ -183,19 +182,19 @@ add_diffs(Tid, Diff, Op, Tuples) when is_list(Tuples) ->
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
-%% @doc Takes in a list of tuples and adds a relation key to the front
-%%      of each tuple in the list. Converts tuples as follows:
-%%      ydb_tuple -> {{'row_num', Count}, ydb_tuple}, where Count is
-%%      a monotomically increasing integer.
 -spec create_relation_tuples(
     Tuples :: [ydb_tuple()]
   , Start :: integer()
 ) ->
-    [tuple()].
+    [tuple()]
+.
 
+%% @doc Takes in a list of tuples and adds a relation key to the front
+%%      of each tuple in the list. Converts tuples as follows:
+%%      ydb_tuple -> {{'row_num', Count}, ydb_tuple}, where Count is
+%%      a monotomically increasing integer.
 create_relation_tuples(Tuples, Start) ->
     lists:zipwith(fun(X, Y) -> {{'row_num', X}, Y} end,
         lists:seq(Start, Start + length(Tuples) - 1),
         Tuples)
 .
-
