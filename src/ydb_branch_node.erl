@@ -60,7 +60,7 @@ notify(PlanNode, Type, Message)
 .
 
 -spec add_listener(pid(), atom(), pid()) ->
-    'ok'
+    {'ok', ydb_schema()}
   | {'error', 'already_subscribed'}.
 
 %% @doc Adds the subscriber as a listener to the branch node for that
@@ -156,7 +156,14 @@ handle_call(
                 )
             )
 
-          , {reply, ok, State#branch_node{listeners=NewListeners}}
+          , {
+                reply
+              , {
+                    ok
+                  , dict:fetch(Type, dict:from_list(State#branch_node.schemas))
+                }
+              , State#branch_node{listeners=NewListeners}
+            }
 
         % `Subscriber' is already a listener
       ; Ref when is_reference(Ref) ->
