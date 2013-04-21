@@ -6,7 +6,7 @@
 -behaviour(ydb_plan_node).
 
 -export([start_link/2]).
--export([init/1, delegate/2, delegate/3]).
+-export([init/1, delegate/2, delegate/3, compute_schema/2]).
 
 % Testing for private functions.
 -ifdef(TEST).
@@ -110,6 +110,26 @@ delegate(_Request, State) ->
 %% @doc Not implemented.
 delegate(_Request, State, _Extras) ->
     {ok, State}
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec compute_schema(
+    InputSchemas :: [ydb_plan_node:ydb_schema()]
+  , State :: socket_output()
+) ->
+    {ok, OutputSchema :: ydb_plan_node:ydb_schema()}
+  | {error, {badarg, InputSchemas :: [ydb_plan_node:ydb_schema()]}}
+.
+
+%% @doc Returns the output schema of the socket output node based upon
+%%      the supplied input schemas. Expects a single schema.
+compute_schema([Schema], #socket_output{}) ->
+    {ok, Schema}
+;
+
+compute_schema(Schemas, #socket_output{}) ->
+    {error, {badarg, Schemas}}
 .
 
 %%% =============================================================== %%%

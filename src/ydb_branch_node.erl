@@ -17,15 +17,15 @@
 -include("ydb_plan_node.hrl").
 
 -record(branch_node, {
-    schemas=[] :: [{atom(), ydb_plan_node:ydb_schema()}]
-  , timestamps=[] :: [{atom(), ydb_plan_node:ydb_timestamp()}]
+    schemas=[] :: [{atom(), ydb_schema()}]
+  , timestamps=[] :: [{atom(), ydb_timestamp()}]
 
   , listeners=[] :: [{atom(), set()}]
 }).
 
 -type branch_node() :: #branch_node{
-    schemas :: [{atom(), ydb_plan_node:ydb_schema()}]
-  , timestamps :: [{atom(), ydb_plan_node:ydb_timestamp()}]
+    schemas :: [{atom(), ydb_schema()}]
+  , timestamps :: [{atom(), ydb_timestamp()}]
   , listeners :: [{atom(), set()}]}.
 %% Internal branch node state.
 
@@ -35,8 +35,8 @@
 
 -spec start_link(
     pid() | atom()
-  , [{atom(), ydb_plan_node:ydb_schema()}]
-  , [{atom(), ydb_plan_node:ydb_timestamp()}]
+  , [{atom(), ydb_schema()}]
+  , [{atom(), ydb_timestamp()}]
 ) ->
     {'ok', pid()}
   | {'error', term()}
@@ -60,7 +60,7 @@ notify(PlanNode, Type, Message)
 .
 
 -spec add_listener(pid(), atom(), pid()) ->
-    'ok'
+    {'ok', ydb_schema()}
   | {'error', 'already_subscribed'}.
 
 %% @doc Adds the subscriber as a listener to the branch node for that
@@ -92,8 +92,8 @@ remove_listener(PlanNode, Type, Subscriber)
 -spec init(
     Args :: {
         pid() | atom()
-      , [{atom(), ydb_plan_node:ydb_schema()}]
-      , [{atom(), ydb_plan_node:ydb_timestamp()}]
+      , [{atom(), ydb_schema()}]
+      , [{atom(), ydb_timestamp()}]
     }
 ) ->
     {ok, branch_node()}
@@ -156,7 +156,14 @@ handle_call(
                 )
             )
 
-          , {reply, ok, State#branch_node{listeners=NewListeners}}
+          , {
+                reply
+              , {
+                    ok
+                  , dict:fetch(Type, dict:from_list(State#branch_node.schemas))
+                }
+              , State#branch_node{listeners=NewListeners}
+            }
 
         % `Subscriber' is already a listener
       ; Ref when is_reference(Ref) ->

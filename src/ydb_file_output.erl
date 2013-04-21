@@ -5,7 +5,7 @@
 -behaviour(ydb_plan_node).
 
 -export([start_link/2]).
--export([init/1, delegate/2, delegate/3]).
+-export([init/1, delegate/2, delegate/3, compute_schema/2]).
 
 -include_lib("kernel/include/file.hrl").
 
@@ -93,6 +93,8 @@ delegate(_Request, State) ->
     {ok, State}
 .
 
+%% ----------------------------------------------------------------- %%
+
 -spec delegate(
     Request :: atom()
   , State :: file_output()
@@ -107,6 +109,25 @@ delegate(_Request, State, _Extras) ->
     {ok, State}
 .
 
+%% ----------------------------------------------------------------- %%
+
+-spec compute_schema(
+    InputSchemas :: [ydb_plan_node:ydb_schema()]
+  , State :: file_output()
+) ->
+    {ok, OutputSchema :: ydb_plan_node:ydb_schema()}
+  | {error, {badarg, InputSchemas :: [ydb_plan_node:ydb_schema()]}}
+.
+
+%% @doc Returns the output schema of the file output node based upon
+%%      the supplied input schemas. Expects a single schema.
+compute_schema([Schema], #file_output{}) ->
+    {ok, Schema}
+;
+
+compute_schema(Schemas, #file_output{}) ->
+    {error, {badarg, Schemas}}
+.
 
 %%% =============================================================== %%%
 %%%  private functions                                              %%%
@@ -156,7 +177,12 @@ close(IoDevice) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec write(Filename :: string(), Data :: ydb_plan_node:ydb_tuple() | list()) -> ok.
+-spec write(
+    Filename :: string()
+  , Data :: ydb_plan_node:ydb_tuple() | [ydb_plan_node:ydb_tuple()]
+) ->
+    'ok'
+.
 
 %% @private
 %% @doc Writes tuples to a file. Flushes the output by opening and

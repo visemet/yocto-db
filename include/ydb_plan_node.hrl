@@ -2,7 +2,7 @@
 %% predicates, and operators.
 
 -export_type([compare/0, ydb_clause/0, ydb_tuple/0]).
-%-export_type([ydb_schema/0, ydb_timestamp/0]).
+-export_type([ydb_schema/0, ydb_timestamp/0]).
 
 -record(ydb_tuple, {
     timestamp=0 :: non_neg_integer()

@@ -6,7 +6,7 @@
 -behaviour(ydb_plan_node).
 
 -export([start_link/2, start_link/3, do_read/1]).
--export([init/1, delegate/2, delegate/3]).
+-export([init/1, delegate/2, delegate/3, compute_schema/2]).
 
 % Testing for private functions.
 -ifdef(TEST).
@@ -90,9 +90,15 @@ do_read(Pid) when is_pid(Pid) ->
 
 %% @private
 %% @doc Initializes the input node's internal state.
-init(Args) when is_list(Args) -> init(Args, #file_input{});
+init(Args) when is_list(Args) ->
+    init(Args, #file_input{})
+;
 
-init(_Args) -> {error, {badarg, not_options_list}}.
+init(_Args) ->
+    {error, {badarg, not_options_list}}
+.
+
+%% ----------------------------------------------------------------- %%
 
 -spec delegate(Request :: atom(), State :: file_input()) ->
     {ok, State :: file_input()}
@@ -111,6 +117,8 @@ delegate(Request = {read}, State = #file_input{}) ->
 
   , {ok, State}
 ;
+
+%% ----------------------------------------------------------------- %%
 
 delegate(_Request, State) ->
     {ok, State}
@@ -173,6 +181,22 @@ delegate(
 
 delegate(_Request, State, _Extras) ->
     {ok, State}
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec compute_schema(
+    InputSchemas :: [ydb_plan_node:ydb_schema()]
+  , State :: file_input()
+) ->
+    {error, {badarg, InputSchemas :: [ydb_plan_node:ydb_schema()]}}
+.
+
+%% @doc Returns the output schema of the file input node based upon the
+%%      supplied input schemas. Not supported, as the schema should
+%%      only be defined during initialization.
+compute_schema(Schemas, #file_input{}) ->
+    {error, {badarg, Schemas}}
 .
 
 %%% =============================================================== %%%
