@@ -296,6 +296,44 @@ handle_cast(
   , {noreply, State#plan_node{wrapped=NewWrapped}}
 ;
 
+handle_cast(
+    {prepare_schema, PlanNodes}
+  , State = #plan_node{
+        type = Type
+      , wrapped = Wrapped
+    }
+) when
+    is_list(PlanNodes)
+  ->
+    case Type:compute_schema(
+        lists:map(
+            fun (PlanNode) when is_pid(PlanNode) ->
+                case add_listener(PlanNode, erlang:self()) of
+                    {ok, Schema} -> Schema
+
+                  ; {error, already_subscribed} -> []
+                end
+
+              ; (PlanNode) when is_function(PlanNode, 0) ->
+                case add_listener(PlanNode(), erlang:self()) of
+                    {ok, Schema} -> Schema
+
+                  ; {error, already_subscribed} -> []
+                end
+            end
+
+          , PlanNodes
+        )
+
+      , Wrapped
+    ) of
+        {ok, Schema} ->
+            {noreply, State#plan_node{schema=Schema}}
+
+      ; {error, Reason} ->
+            {stop, Reason, State}
+    end
+;
 handle_cast(_Request, State) ->
     {noreply, State}
 .
@@ -383,36 +421,13 @@ init([Timestamp = {Unit, Name} | Options], State = #plan_node{})
     init(Options, State#plan_node{timestamp=Timestamp})
 ;
 
-init(
-    [{listen, PlanNodes} | Options]
-  , State = #plan_node{
-        type = Type
-      , wrapped = Wrapped
-    }
-) when
+init([{listen, PlanNodes} | Options], State = #plan_node{})
+  when
     is_list(PlanNodes)
   ->
-    case Type:compute_schema(
-        lists:map(
-            fun(PlanNode) when is_pid(PlanNode) ->
-                case add_listener(PlanNode, erlang:self()) of
-                    {ok, Schema} -> Schema
+    gen_server:cast(erlang:self(), {prepare_schema, PlanNodes})
 
-                  ; {error, already_subscribed} -> []
-                end
-            end
-
-          , PlanNodes
-        )
-
-      , Wrapped
-    ) of
-        {ok, Schema} ->
-            init(Options, State#plan_node{schema=Schema})
-
-      ; {error, Reason} ->
-            {error, Reason}
-    end
+  , init(Options, State)
 ;
 
 init([Term | _Options], #plan_node{}) ->
