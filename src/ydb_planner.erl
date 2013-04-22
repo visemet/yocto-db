@@ -58,6 +58,40 @@ make_no_branch(
   , make_no_branch(Next, CurrId, NewHistory, [ChildSpec|Result])
 ;
 
+make_no_branch(
+    {Type = project, Next, Columns}
+  , PrevId
+  , History
+  , Result
+) when
+    is_tuple(Next)
+  , is_atom(PrevId) orelse is_tuple(PrevId)
+  , is_list(Result)
+  ->
+    CurrId = case dict:find(Type, History) of
+        {ok, Value} -> {Type, Value}
+
+      ; error -> {Type, 0}
+    end
+
+  , Listen = if
+        % Listens to an input stream
+        is_atom(PrevId) -> PrevId
+
+        % Listens to another node in the query
+      ; is_tuple(PrevId) -> ydb_sup_utils:pid_fun(PrevId)
+    end
+
+  , ChildSpec = prepare_child_spec(CurrId, {ydb_project, start_link, [
+        [{columns, Columns}]
+      , [{listen, [Listen]}]
+    ]})
+
+  , NewHistory = dict:update_counter(Type, 1, History)
+
+  , make_no_branch(Next, CurrId, NewHistory, [ChildSpec|Result])
+;
+
 make_no_branch(Query, _PrevId, _History, _Result) ->
     {error, {badarg, Query}}
 .
