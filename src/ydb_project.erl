@@ -6,7 +6,9 @@
 -behaviour(ydb_plan_node).
 
 -export([start_link/2, start_link/3]).
--export([init/1, delegate/2, delegate/3]).
+-export([init/1, delegate/2, delegate/3, compute_schema/2]).
+
+-export([get_indexes/3]).
 
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
@@ -22,14 +24,16 @@
 %%% =============================================================== %%%
 
 -record(project, {
-    columns :: [atom() | {atom(), atom()}]
+    columns=[] :: [atom() | {atom(), atom()}]
   , include=true :: boolean()
+  , indexes=[] :: [integer()]
   , schema :: dict()
 }).
 
 -type project() :: #project{
-    columns :: undefined | [atom() | {atom(), atom()}]
+    columns :: [atom() | {atom(), atom()}]
   , include :: boolean()
+  , indexes :: [integer()]
   , schema :: undefined | dict()}.
 %% Internal project node state.
 
@@ -122,6 +126,19 @@ delegate(
   , {ok, State}
 ;
 
+%% @doc Receives the new schema and sets it as part of the state.
+delegate(_Request = {schema, Schema}, State = #project{}) ->
+    NewState = State#project{schema=dict:from_list(Schema)}
+  , {ok, NewState}
+;
+
+%% @doc Receives the new set of valid indexes and sets it as part
+%%      of the state.
+delegate(_Request = {indexes, Indexes}, State = #project{}) ->
+    NewState = State#project{indexes=Indexes}
+  , {ok, NewState}
+;
+
 delegate(_Request = {info, Message}, State) ->
     delegate(Message, State)
 ;
@@ -138,15 +155,39 @@ delegate(_Request, State) ->
     {ok, NewState :: project()}
 .
 
-%% @private
-%% @doc Receives the schema of the tuples and adds it to the state.
-delegate(_Request = {get_schema}, State, _Extras = [Schema, _Timestamp]) ->
-    NewState = State#project{schema=dict:from_list(Schema)}
-  , {ok, NewState}
-;
-
 delegate(_Request, State, _Extras) ->
     {ok, State}
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec compute_schema(
+    InputSchemas :: [ydb_plan_node:ydb_schema()]
+  , State :: project()
+) ->
+    {ok, OutputSchema :: ydb_plan_node:ydb_schema()}
+  | {error, {badarg, InputSchemas :: [ydb_plan_node:ydb_schema()]}}
+.
+
+%% @doc Returns the output schema of the project node based upon the
+%%      supplied input schemas. Expects a single schema.
+compute_schema([Schema], #project{columns=Columns, include=Include}) ->
+    {Indexes, NewSchema} = compute_new_schema(Schema, Columns, Include)
+    
+    % Inform self of new schema and list of indexes.
+  , ydb_plan_node:relegate(
+        erlang:self()
+      , {schema, NewSchema}
+    )
+  , ydb_plan_node:relegate(
+        erlang:self()
+      , {indexes, Indexes}
+    )
+  , {ok, NewSchema}
+;   
+
+compute_schema(Schemas, #project{}) ->
+    {error, {badarg, Schemas}}
 .
 
 %%% =============================================================== %%%
@@ -162,28 +203,71 @@ delegate(_Request, State, _Extras) ->
 %% @doc Parses initializing arguments to set up the internal state of
 %%      the project node.
 init([], State = #project{}) ->
-    post_init(State)
+    {ok, State}
 ;
 
 init([{columns, Columns} | Args], State = #project{}) ->
     init(Args, State#project{columns=Columns})
 ;
 
+init([{include, Include} | Args], State = #project{}) ->
+    init(Args, State#project{include=Include})
+;
+
 init([Term | _Args], #project{}) ->
     {error, {badarg, Term}}
 .
 
--spec post_init(State :: project()) -> {ok, NewState :: project()}.
+%% ----------------------------------------------------------------- %%
+
+-spec compute_new_schema(
+    Schema :: ydb_plan_node:ydb_schema()
+  , Columns :: [atom() | {atom(), atom()}]
+  , Include :: boolean()
+) ->
+    {Indexes :: [integer()], NewSchema :: ydb_plan_node:ydb_schema()}
+.
 
 %% @private
-%% @doc Gets the schema for the tuples.
-post_init(State = #project{}) ->
-    ydb_plan_node:relegate(
-        erlang:self()
-      , {get_schema}
-      , [schema, timestamp]
+%% @doc Computes the new schema.
+compute_new_schema(Schema, Columns, Include) ->
+    Indexes = get_indexes(Include, Columns, dict:from_list(Schema))
+    % Loop through each index to select out only desired columns to 
+    % create a new schema. Also does the renaming if necessary.
+  , ColRange = lists:seq(1, length(Indexes))
+  , NewSchema = lists:map(fun(I) ->
+        Index = lists:nth(I, Indexes)
+      , get_col(I, Index, Columns, Schema, Include) end, ColRange
     )
-  , {ok, State}
+  , {Indexes, NewSchema}
+.
+
+-spec get_col(
+    I :: integer()
+  , Index :: integer()
+  , Columns :: [atom() | {atom(), atom()}]
+  , Schema :: ydb_plan_node:ydb_schema()
+  , Include :: boolean()
+) ->
+    {ColName :: atom(), {I :: integer(), Type :: atom()}}.
+
+%% @private
+%% @doc Returns the column at a particular index in the schema.
+%%      Renames the column if desired.
+get_col(I, Index, Columns, Schema, _Include=true) ->
+    % Columns is the list of columns we do want, and their renames.
+    Column = lists:nth(I, Columns)
+  , {_OldName, {_Index, Type}} = lists:nth(Index, Schema)
+  , case Column of
+        {_OldName, NewName} -> {NewName, {I, Type}}
+      ; ColName -> {ColName, {I, Type}}
+    end
+;
+
+get_col(I, Index, _Columns, Schema, _Include=false) ->
+    % Index is the index of the column we DO want from Schema.
+    {ColName, {_Index, Type}} = lists:nth(Index, Schema)
+  , {ColName, {I, Type}}
 .
 
 -spec check_tuple(
@@ -196,10 +280,10 @@ post_init(State = #project{}) ->
 %% to the project node's listeners.
 check_tuple(
     Tuple=#ydb_tuple{data=Data}
-  , _State=#project{columns=Columns, schema=Schema}
+  , _State=#project{indexes=Indexes}
 ) ->
-    NewData = lists:map(fun(Col) ->
-        element(get_index(Col, Schema), Data) end, Columns
+    NewData = lists:map(fun(Index) ->
+        element(Index, Data) end, Indexes
     )
   , NewTuple = Tuple#ydb_tuple{data=list_to_tuple(NewData)}
   , ydb_plan_node:notify(
@@ -208,16 +292,39 @@ check_tuple(
     )
 .
 
--spec get_index(Column :: atom() | {atom(), atom()}, Schema :: dict()) ->
-    Index :: integer()
+-spec get_indexes(
+    Include :: boolean()
+  , Columns :: [atom() | {atom(), atom()}]
+  , Schema :: dict())
+->
+    Indexes :: [integer()]
 .
 
 %% @private
-%% @doc Gets the index of the column based on the schema.
-get_index({ColName, _NewName}, Schema) ->
-    get_index(ColName, Schema)
-    % TODO change schema based on renames
-  % TODO handle unknown names
+%% @doc Gets the list of indexes of the desired columns, based on a list of
+%%      column names that are supposed to be excluded or included.
+get_indexes(_Include=true, Columns, Schema) ->
+    Indexes = lists:map(fun(Col) ->
+        get_index(Col, Schema) end, Columns
+    )
+  , Indexes
+;
+
+get_indexes(_Include=false, Columns, Schema) ->
+    BadIndexes = get_indexes(true, Columns, Schema)
+  , Indexes = lists:seq(1, length(dict:to_list(Schema)))
+  , lists:subtract(Indexes, BadIndexes)
+.
+
+-spec get_index(
+    ColName :: atom() | {atom(), atom()}
+  , Schema :: dict())
+->
+    integer() | error.
+
+%% @doc Gets the index of a particular column.
+get_index(_Col={OldName, _NewName}, Schema) ->
+    get_index(OldName, Schema)
 ;
 
 get_index(ColName, Schema) ->
