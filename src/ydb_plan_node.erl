@@ -99,7 +99,9 @@ notify(PlanNode, Message) when is_pid(PlanNode) ->
     gen_server:cast(PlanNode, {notify, Message})
 .
 
--spec add_listener(pid(), pid()) ->
+%% ----------------------------------------------------------------- %%
+
+-spec add_listener(pid() | atom(), pid()) ->
     {ok, ydb_schema()}
   | {error, already_subscribed}
 .
@@ -111,7 +113,25 @@ add_listener(PlanNode, Subscriber)
   , is_pid(Subscriber)
   ->
     gen_server:call(PlanNode, {subscribe, Subscriber})
+;
+
+add_listener(PlanNodeName, Subscriber)
+  when
+    is_atom(PlanNodeName)
+  , is_pid(Subscriber)
+  ->
+    case erlang:whereis(PlanNodeName) of
+        undefined ->
+            erlang:exit({noproc, {?MODULE, add_listener,
+                [PlanNodeName, Subscriber]
+            }})
+
+      ; PlanNodePid when is_pid(PlanNodePid) ->
+            add_listener(PlanNodePid, Subscriber)
+    end
 .
+
+%% ----------------------------------------------------------------- %%
 
 -spec remove_listener(pid(), pid()) -> ok.
 
@@ -296,6 +316,51 @@ handle_cast(
   , {noreply, State#plan_node{wrapped=NewWrapped}}
 ;
 
+handle_cast(
+    {prepare_schema, PlanNodes}
+  , State = #plan_node{
+        type = Type
+      , wrapped = Wrapped
+    }
+) when
+    is_list(PlanNodes)
+  ->
+    case Type:compute_schema(
+        lists:map(
+            fun (PlanNode) when is_pid(PlanNode) ->
+                case add_listener(PlanNode, erlang:self()) of
+                    {ok, Schema} -> Schema
+
+                  ; {error, already_subscribed} -> []
+                end
+
+              ; (PlanNode) when is_atom(PlanNode) ->
+                case add_listener(PlanNode, erlang:self()) of
+                    {ok, Schema} -> Schema
+
+                  ; {error, already_subscribed} -> []
+                end
+
+              ; (PlanNode) when is_function(PlanNode, 0) ->
+                case add_listener(PlanNode(), erlang:self()) of
+                    {ok, Schema} -> Schema
+
+                  ; {error, already_subscribed} -> []
+                end
+            end
+
+          , PlanNodes
+        )
+
+      , Wrapped
+    ) of
+        {ok, Schema} ->
+            {noreply, State#plan_node{schema=Schema}}
+
+      ; {error, Reason} ->
+            {stop, Reason, State}
+    end
+;
 handle_cast(_Request, State) ->
     {noreply, State}
 .
@@ -383,36 +448,13 @@ init([Timestamp = {Unit, Name} | Options], State = #plan_node{})
     init(Options, State#plan_node{timestamp=Timestamp})
 ;
 
-init(
-    [{listen, PlanNodes} | Options]
-  , State = #plan_node{
-        type = Type
-      , wrapped = Wrapped
-    }
-) when
+init([{listen, PlanNodes} | Options], State = #plan_node{})
+  when
     is_list(PlanNodes)
   ->
-    case Type:compute_schema(
-        lists:map(
-            fun(PlanNode) when is_pid(PlanNode) ->
-                case add_listener(PlanNode, erlang:self()) of
-                    {ok, Schema} -> Schema
+    gen_server:cast(erlang:self(), {prepare_schema, PlanNodes})
 
-                  ; {error, already_subscribed} -> []
-                end
-            end
-
-          , PlanNodes
-        )
-
-      , Wrapped
-    ) of
-        {ok, Schema} ->
-            init(Options, State#plan_node{schema=Schema})
-
-      ; {error, Reason} ->
-            {error, Reason}
-    end
+  , init(Options, State)
 ;
 
 init([Term | _Options], #plan_node{}) ->

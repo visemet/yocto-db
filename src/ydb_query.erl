@@ -14,8 +14,8 @@
 %-spec TODO
 
 %% @doc TODO
-start_link(Query) ->
-    supervisor:start_link(?MODULE, {Query})
+start_link(QuerySpec) ->
+    supervisor:start_link(?MODULE, {QuerySpec})
 .
 
 %% ----------------------------------------------------------------- %%
@@ -23,9 +23,12 @@ start_link(Query) ->
 %-spec TODO
 
 %% @doc TODO
-init({_Query}) ->
-    % TODO call to planner
-    {ok, {{one_for_one, 1, 60}, []}}
+init({QuerySpec}) ->
+    case ydb_planner:make_no_branch(QuerySpec) of
+        {ok, ChildSpec} -> {ok, {{one_for_one, 1, 60}, ChildSpec}}
+
+      ; {error, _Reason} -> ignore
+    end
 .
 
 %%% =============================================================== %%%

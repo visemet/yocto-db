@@ -7,13 +7,13 @@
 %%% =============================================================== %%%
 
 -spec pid_fun(
-    ChildId :: atom() % supervisor:child_id()
+    ChildId :: term() % supervisor:child_id()
 ) ->
     fun(() -> ChildPid :: pid())
 .
 
 %% @doc TODO
-pid_fun(ChildId) when is_atom(ChildId) ->
+pid_fun(ChildId) when not is_pid(ChildId) ->
     SupRef = erlang:self()
 
   , fun() ->
@@ -23,7 +23,7 @@ pid_fun(ChildId) when is_atom(ChildId) ->
 
 -spec get_pid(
     SupRef :: pid() % supervisor:sup_ref()
-  , ChildId :: atom() % supervisor:child_id()
+  , ChildId :: term() % supervisor:child_id()
 ) ->
     ChildPid :: pid()
 .
@@ -32,7 +32,7 @@ pid_fun(ChildId) when is_atom(ChildId) ->
 get_pid(SupRef, ChildId)
   when
     is_pid(SupRef)
-  , is_atom(ChildId)
+  , not is_pid(ChildId)
   ->
     erlang:element(
         2 % {Id, **Child, Type, Modules}
