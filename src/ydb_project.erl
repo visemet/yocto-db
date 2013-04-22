@@ -15,7 +15,7 @@
 
 % Testing for private functions.
 -ifdef(TEST).
--export([get_index/2]).
+-export([compute_new_schema/3]).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
@@ -291,6 +291,8 @@ check_tuple(
       , {tuple, NewTuple}
     )
 .
+
+%% ----------------------------------------------------------------- %%
 
 -spec get_indexes(
     Include :: boolean()

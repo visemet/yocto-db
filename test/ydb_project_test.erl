@@ -11,6 +11,36 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+compute_schema_test() ->
+    ?assertMatch(
+        [{wow, {1, string}}]
+      , compute_schema_test_helper([{stock_name, wow}])
+    )
+  , ?assertMatch(
+        [{day, {1, int}}, {stock_name, {2, string}}, {amt, {3, int}}]
+      , compute_schema_test_helper([day, stock_name, amt])
+    )
+  , ?assertMatch(
+        [{one, {1, int}}, {two, {2, int}}, {three, {3, string}}]
+      , compute_schema_test_helper([
+            {day, one}
+          , {amt, two}
+          , {stock_name, three}
+        ])
+    )
+  , ?assertMatch(
+        [{one, {1, int}}, {stock_name, {2, string}}, {three, {3, int}}]
+      , compute_schema_test_helper([{day, one}, stock_name, {amt, three}])
+    )
+.
+
+compute_schema_test_helper(Columns) ->
+    Schema = [{stock_name, {1, string}}, {day, {2, int}}, {amt, {3, int}}]
+  , {_Indexes, NewSchema} =
+        ydb_project:compute_new_schema(Schema, Columns, true)
+  , NewSchema
+.
+
 start_link_test() ->
     ?assert(start_link_test_1())
   , ?assert(start_link_test_2())
