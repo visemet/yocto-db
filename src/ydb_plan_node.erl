@@ -99,7 +99,9 @@ notify(PlanNode, Message) when is_pid(PlanNode) ->
     gen_server:cast(PlanNode, {notify, Message})
 .
 
--spec add_listener(pid(), pid()) ->
+%% ----------------------------------------------------------------- %%
+
+-spec add_listener(pid() | atom(), pid()) ->
     {ok, ydb_schema()}
   | {error, already_subscribed}
 .
@@ -111,7 +113,25 @@ add_listener(PlanNode, Subscriber)
   , is_pid(Subscriber)
   ->
     gen_server:call(PlanNode, {subscribe, Subscriber})
+;
+
+add_listener(PlanNodeName, Subscriber)
+  when
+    is_atom(PlanNodeName)
+  , is_pid(Subscriber)
+  ->
+    case erlang:whereis(PlanNodeName) of
+        undefined ->
+            erlang:exit({noproc, {?MODULE, add_listener,
+                [PlanNodeName, Subscriber]
+            }})
+
+      ; PlanNodePid when is_pid(PlanNodePid) ->
+            add_listener(PlanNodePid, Subscriber)
+    end
 .
+
+%% ----------------------------------------------------------------- %%
 
 -spec remove_listener(pid(), pid()) -> ok.
 
@@ -308,6 +328,13 @@ handle_cast(
     case Type:compute_schema(
         lists:map(
             fun (PlanNode) when is_pid(PlanNode) ->
+                case add_listener(PlanNode, erlang:self()) of
+                    {ok, Schema} -> Schema
+
+                  ; {error, already_subscribed} -> []
+                end
+
+              ; (PlanNode) when is_atom(PlanNode) ->
                 case add_listener(PlanNode, erlang:self()) of
                     {ok, Schema} -> Schema
 
