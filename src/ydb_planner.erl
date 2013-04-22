@@ -1,6 +1,6 @@
 -module(ydb_planner).
 
--export([make_no_branch/2]).
+-export([make_no_branch/1]).
 
 %%% =============================================================== %%%
 %%%  API                                                            %%%
@@ -9,7 +9,11 @@
 %-spec
 
 %% @doc TODO
-make_no_branch(Name, Query) when is_atom(Name) ->
+make_no_branch({input_stream, Query, Name})
+  when
+    is_tuple(Query)
+  , is_atom(Name)
+  ->
     make_no_branch(Query, Name, dict:new(), [])
 .
 
