@@ -8,8 +8,6 @@
 -export([start_link/2, start_link/3]).
 -export([init/1, delegate/2, delegate/3, compute_schema/2]).
 
--export([get_indexes/3]).
-
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
 
@@ -276,8 +274,8 @@ get_col(I, Index, _Columns, Schema, _Include=false) ->
 ) -> ok.
 
 %% @private
-%% Projects the tuple down to the desired columns, then passes it along
-%% to the project node's listeners.
+%% @doc Projects the tuple down to the desired columns, then passes it
+%%      along to the project node's listeners.
 check_tuple(
     Tuple=#ydb_tuple{data=Data}
   , _State=#project{indexes=Indexes}
