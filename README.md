@@ -109,6 +109,34 @@ column {atom(), atom()}.
 ### Set Difference
 
     {ydb_diff_node, left_node, right_node}
+    
+### Min
+
+    {ydb_min, child_node, column :: atom() | {atom(), atom()}}
+    
+### Max
+
+    {ydb_max, child_node, column :: atom() | {atom(), atom()}}
+    
+### Sum
+
+    {ydb_sum, child_node, column :: atom() | {atom(), atom()}}
+    
+### Count
+
+    {ydb_count, child_node, column :: atom() | {atom(), atom()}}
+    
+### Average
+
+    {ydb_avg, child_node, column :: atom() | {atom(), atom()}}
+    
+### Variance
+
+    {ydb_var, child_node, column :: atom() | {atom(), atom()}}
+    
+### Standard Deviation
+
+    [ydb_stddev, child_node, column :: atom() | {atom(), atom()}}
 
 Predicate Format
 ----------------
