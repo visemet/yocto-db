@@ -64,7 +64,7 @@ dump_tuples(Tid) ->
 
 %% @doc Creates a new ets table with the given name.
 create_table(Name) ->
-    Tid = ets:new(Name, []) % TODO add options
+    Tid = ets:new(Name, [bag]) % TODO add options
   , {ok, Tid}
 .
 
