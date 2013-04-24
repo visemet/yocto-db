@@ -1,8 +1,8 @@
 %% @author Angela Gong <anjoola@anjoola.com>
 
-%% @doc Module for the MIN aggregate function. Finds the minimum value
+%% @doc Module for the MAX aggregate function. Finds the maximum value
 %%      so far.
--module(ydb_min).
+-module(ydb_max).
 -behaviour(ydb_plan_node).
 
 -export([start_link/2, start_link/3]).
@@ -20,24 +20,24 @@
 %%%  internal records and types                                     %%%
 %%% =============================================================== %%%
 
--record(aggr_min, {
+-record(aggr_max, {
     column :: atom() | {atom(), atom()}
   , index :: integer()
-  , curr_min :: integer()
+  , curr_max :: integer()
 }).
 
--type aggr_min() :: #aggr_min{
+-type aggr_max() :: #aggr_max{
     column :: undefined | atom() | {atom(), atom()}
   , index :: undefined | integer()
-  , curr_min :: undefined | integer()}.
-%% Internal min aggregate state.
+  , curr_max :: undefined | integer()}.
+%% Internal max aggregate state.
 
 -type option() ::
     {column, Column :: atom() | {ColName :: atom(), NewName :: atom()}}.
-%% Options for the MIN aggregate:
+%% Options for the MAX aggregate:
 %% <ul>
 %%   <li><code>{column, Column}</code> - The column name to find the
-%%       minimum of. <code>Column</code> is either an atom
+%%       maximum of. <code>Column</code> is either an atom
 %%       <code>Column</code> which is the name of the column, or the
 %%       tuple <code>{ColName, NewName}</code> which is the current
 %%       name of the column and the desired new name.</li>
@@ -77,50 +77,50 @@ start_link(Name, Args, Options) ->
 %% ----------------------------------------------------------------- %%
 
 -spec init(Args :: [option()]) ->
-    {ok, State :: aggr_min()}
+    {ok, State :: aggr_max()}
   | {error, {badarg, Term :: term()}}
 .
 
 %% @private
 %% @doc Initializes the input node's internal state.
-init(Args) when is_list(Args) -> init(Args, #aggr_min{});
+init(Args) when is_list(Args) -> init(Args, #aggr_max{});
 
 init(_Args) -> {error, {badarg, not_options_list}}.
 
--spec delegate(Request :: atom(), State :: aggr_min()) ->
-    {ok, State :: aggr_min()}
+-spec delegate(Request :: atom(), State :: aggr_max()) ->
+    {ok, State :: aggr_max()}
 .
 
 %% @private
-%% @doc Passes the new minimum down to its subscribers.
+%% @doc Passes the new maximum down to its subscribers.
 delegate(
     _Request = {tuple, Tuple}
-  , State = #aggr_min{curr_min=CurrMin, index=Index}
+  , State = #aggr_max{curr_max=CurrMax, index=Index}
 ) ->
-    NewMin = check_tuple(Tuple, Index, CurrMin)
-  , NewState = State#aggr_min{curr_min=NewMin}
+    NewMax = check_tuple(Tuple, Index, CurrMax)
+  , NewState = State#aggr_max{curr_max=NewMax}
   , {ok, NewState}
 ;
 
 delegate(
     _Request = {tuples, Tuples}
-  , State = #aggr_min{curr_min=CurrMin, index=Index}
+  , State = #aggr_max{curr_max=CurrMax, index=Index}
 ) ->
-    NewMin = lists:foldl(
-        fun(Tuple, Min) ->
-            check_tuple(Tuple, Index, Min)
+    NewMax = lists:foldl(
+        fun(Tuple, Max) ->
+            check_tuple(Tuple, Index, Max)
         end
-      , CurrMin
+      , CurrMax
       , Tuples
     )
-  , NewState = State#aggr_min{curr_min=NewMin}
+  , NewState = State#aggr_max{curr_max=NewMax}
   , {ok, NewState}
 ;
 
 %% @doc Receives the new set of valid indexes and sets it as part
 %%      of the state.
-delegate(_Request = {index, Index}, State = #aggr_min{}) ->
-    NewState = State#aggr_min{index=Index}
+delegate(_Request = {index, Index}, State = #aggr_max{}) ->
+    NewState = State#aggr_max{index=Index}
   , {ok, NewState}
 ;
 
@@ -134,10 +134,10 @@ delegate(_Request, State) ->
 
 -spec delegate(
     Request :: atom()
-  , State :: aggr_min()
+  , State :: aggr_max()
   , Extras :: list()
 ) ->
-    {ok, NewState :: aggr_min()}
+    {ok, NewState :: aggr_max()}
 .
 
 delegate(_Request, State, _Extras) ->
@@ -148,17 +148,17 @@ delegate(_Request, State, _Extras) ->
 
 -spec compute_schema(
     InputSchemas :: [ydb_plan_node:ydb_schema()]
-  , State :: aggr_min()
+  , State :: aggr_max()
 ) ->
     {ok, OutputSchema :: ydb_plan_node:ydb_schema()}
   | {error, {badarg, InputSchemas :: [ydb_plan_node:ydb_schema()]}}
 .
 
-%% @doc Returns the output schema of the min aggregate based upon the
+%% @doc Returns the output schema of the max aggregate based upon the
 %%      supplied input schemas. Expects a single schema.
-compute_schema([Schema], #aggr_min{column=Column}) ->
+compute_schema([Schema], #aggr_max{column=Column}) ->
     {Index, NewSchema} =
-        ydb_aggr_utils:compute_new_schema(Schema, Column, "MIN")
+        ydb_aggr_utils:compute_new_schema(Schema, Column, "MAX")
     % Inform self of index to check for.
   , ydb_plan_node:relegate(
         erlang:self()
@@ -167,7 +167,7 @@ compute_schema([Schema], #aggr_min{column=Column}) ->
   , {ok, NewSchema}
 ;   
 
-compute_schema(Schemas, #aggr_min{}) ->
+compute_schema(Schemas, #aggr_max{}) ->
     {error, {badarg, Schemas}}
 .
 
@@ -175,23 +175,23 @@ compute_schema(Schemas, #aggr_min{}) ->
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
--spec init([option()], State :: aggr_min()) ->
-    {ok, State :: aggr_min()}
+-spec init([option()], State :: aggr_max()) ->
+    {ok, State :: aggr_max()}
   | {error, {badarg, Term :: term()}}
 .
 
 %% @private
 %% @doc Parses initializing arguments to set up the internal state of
-%%      the min aggregate node.
-init([], State = #aggr_min{}) ->
+%%      the max aggregate node.
+init([], State = #aggr_max{}) ->
     {ok, State}
 ;
 
-init([{column, Column} | Args], State = #aggr_min{}) ->
-    init(Args, State#aggr_min{column=Column})
+init([{column, Column} | Args], State = #aggr_max{}) ->
+    init(Args, State#aggr_max{column=Column})
 ;
 
-init([Term | _Args], #aggr_min{}) ->
+init([Term | _Args], #aggr_max{}) ->
     {error, {badarg, Term}}
 .
 
@@ -200,43 +200,43 @@ init([Term | _Args], #aggr_min{}) ->
 -spec check_tuple(
     Tuple :: ydb_plan_node:ydb_tuple()
   , Index :: integer()
-  , CurrMin :: number()
-) -> NewMin :: integer().
+  , CurrMax :: number()
+) -> NewMax :: integer().
 
 %% @private
-%% @doc Selects only the necessary column required for finding the min
-%%      and checks to see if it is indeed the minimum.
+%% @doc Selects only the necessary column required for finding the max
+%%      and checks to see if it is indeed the maximum.
 check_tuple(
     Tuple=#ydb_tuple{data=Data}
   , Index
-  , CurrMin
+  , CurrMax
 ) ->
     RelevantData = element(Index, Data)
-  , NewMin = check_min(CurrMin, RelevantData)
-  , NewTuple = Tuple#ydb_tuple{data=list_to_tuple([NewMin])}
+  , NewMax = check_max(CurrMax, RelevantData)
+  , NewTuple = Tuple#ydb_tuple{data=list_to_tuple([NewMax])}
   , ydb_plan_node:notify(
         erlang:self()
       , {tuple, NewTuple}
     )
-  , NewMin
+  , NewMax
 .
 
--spec check_min(Min :: number(), NewNum :: number()) ->
-    NewMin :: number().
+-spec check_max(Max :: number(), NewNum :: number()) ->
+    NewMax :: number().
 
-%% @doc Checks two numbers and returns the minimum of them.
-check_min(undefined, NewNum) ->
+%% @doc Checks two numbers and returns the maximum of them.
+check_max(undefined, NewNum) ->
     NewNum
 ;
 
-check_min(Min, NewNum) when is_integer(NewNum) ->
-    NewMin = min(Min, NewNum)
-  , NewMin
+check_max(Max, NewNum) when is_integer(NewNum) ->
+    NewMax = max(Max, NewNum)
+  , NewMax
 ;
 
-check_min(Min, NewNum) when is_float(NewNum) ->
-    NewMin = min(Min, NewNum)
-  , NewMin
+check_max(Max, NewNum) when is_float(NewNum) ->
+    NewMax = max(Max, NewNum)
+  , NewMax
 .
 
 %%% =============================================================== %%%
@@ -246,12 +246,12 @@ check_min(Min, NewNum) when is_float(NewNum) ->
 -ifdef(TEST).
 init_test() ->
     ?assertMatch(
-        {ok, #aggr_min{column=[first]}}
-      , init([], #aggr_min{column=[first]})
+        {ok, #aggr_max{column=[first]}}
+      , init([], #aggr_max{column=[first]})
     )
   , ?assertMatch(
         {error, {badarg, bad}}
-      , init([bad], #aggr_min{})
+      , init([bad], #aggr_max{})
     )
 .
 -endif.
