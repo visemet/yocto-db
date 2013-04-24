@@ -23,13 +23,13 @@
 -record(aggr_min, {
     column :: atom() | {atom(), atom()}
   , index :: integer()
-  , tid :: ets:tid()
+  , curr_min :: integer()
 }).
 
 -type aggr_min() :: #aggr_min{
     column :: undefined | atom() | {atom(), atom()}
   , index :: undefined | integer()
-  , tid :: undefined | ets:tid()}.
+  , curr_min :: undefined | integer()}.
 %% Internal min aggregate state.
 
 -type option() ::
@@ -92,24 +92,29 @@ init(_Args) -> {error, {badarg, not_options_list}}.
 .
 
 %% @private
-%% @doc Passes on the tuple to subscribers after it is projected
-%%      down.
+%% @doc Passes the new minimum down to its subscribers.
 delegate(
     _Request = {tuple, Tuple}
-  , State = #aggr_min{}
+  , State = #aggr_min{curr_min=CurrMin, index=Index}
 ) ->
-    check_tuple(Tuple, State)
-  , {ok, State}
+    NewMin = check_tuple(Tuple, Index, CurrMin)
+  , NewState = State#aggr_min{curr_min=NewMin}
+  , {ok, NewState}
 ;
 
 delegate(
     _Request = {tuples, Tuples}
-  , State = #aggr_min{}
+  , State = #aggr_min{curr_min=CurrMin, index=Index}
 ) ->
-    lists:foreach(fun(Tuple) ->
-        check_tuple(Tuple, State) end, Tuples
+    NewMin = lists:foldl(
+        fun(Tuple, Min) ->
+            check_tuple(Tuple, Index, Min)
+        end
+      , CurrMin
+      , Tuples
     )
-  , {ok, State}
+  , NewState = State#aggr_min{curr_min=NewMin}
+  , {ok, NewState}
 ;
 
 %% @doc Receives the new set of valid indexes and sets it as part
@@ -152,7 +157,8 @@ delegate(_Request, State, _Extras) ->
 %% @doc Returns the output schema of the min aggregate based upon the
 %%      supplied input schemas. Expects a single schema.
 compute_schema([Schema], #aggr_min{column=Column}) ->
-    {Index, NewSchema} = compute_new_schema(Schema, Column)
+    {Index, NewSchema} =
+        ydb_aggr_utils:compute_new_schema(Schema, Column, "MIN")
     % Inform self of index to check for.
   , ydb_plan_node:relegate(
         erlang:self()
@@ -176,10 +182,9 @@ compute_schema(Schemas, #aggr_min{}) ->
 
 %% @private
 %% @doc Parses initializing arguments to set up the internal state of
-%%      the project node.
+%%      the min aggregate node.
 init([], State = #aggr_min{}) ->
-    NewState = post_init(State)
-  , {ok, NewState}
+    {ok, State}
 ;
 
 init([{column, Column} | Args], State = #aggr_min{}) ->
@@ -192,74 +197,50 @@ init([Term | _Args], #aggr_min{}) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec post_init(State :: aggr_min()) -> NewState :: aggr_min().
-
-%% @private
-%% @doc Sets up the ETS table for intermediate results.
-post_init(State) ->
-    {ok, Tid} = ydb_ets_utils:create_table(aggr_min)
-  , NewState = State#aggr_min{tid=Tid}
-  % TODO create entry?
-  , NewState
-.
-
--spec compute_new_schema(
-    Schema :: ydb_plan_node:ydb_schema()
-  , Column :: atom() | {atom(), atom()}
-) ->
-    {Index :: integer(), NewSchema :: ydb_plan_node:ydb_schema()}
-.
-
-%% @private
-%% @doc Computes the new schema.
-compute_new_schema(Schema, {OldCol, NewCol}) ->
-    {Index, Type} = get_col(OldCol, dict:from_list(Schema))
-  , NewSchema = [{NewCol, {1, Type}}]
-  , {Index, NewSchema}
-;
-
-compute_new_schema(Schema, Column) ->
-    compute_new_schema(Schema, {Column, Column})
-.
-
 -spec check_tuple(
     Tuple :: ydb_plan_node:ydb_tuple()
-  , State :: aggr_min()
-) -> ok.
+  , Index :: integer()
+  , CurrMin :: number()
+) -> NewMin :: integer().
 
 %% @private
 %% @doc Selects only the necessary column required for finding the min
 %%      and checks to see if it is indeed the minimum.
 check_tuple(
     Tuple=#ydb_tuple{data=Data}
-  , _State=#aggr_min{index=Index}
+  , Index
+  , CurrMin
 ) ->
     RelevantData = element(Index, Data)
-    , Min = 3
-  %, Min = ydb_ets_utils: ? % TODO ets table stuff
-  , NewMin = min(Min, RelevantData)
+  , NewMin = check_min(CurrMin, RelevantData)
   , NewTuple = Tuple#ydb_tuple{data=list_to_tuple([NewMin])}
   , ydb_plan_node:notify(
         erlang:self()
       , {tuple, NewTuple}
     )
+  , ydb_plan_node:notify(
+        erlang:self()
+      , {new_min, NewMin}
+    )
+  , NewMin
 .
 
-%% ----------------------------------------------------------------- %%
+-spec check_min(Min :: number(), NewNum :: number()) ->
+    NewMin :: number().
 
--spec get_col(
-    ColName :: atom()
-  , Schema :: dict())
-->
-    {Index :: integer(), Type :: atom()} | error.
+%% @doc Checks two numbers and returns the minimum of them.
+check_min(undefined, NewNum) ->
+    NewNum
+;
 
-%% @doc Gets the index and of a particular column.
-get_col(ColName, Schema) ->
-    case dict:find(ColName, Schema) of
-        {ok, {Index, Type}} ->
-            {Index, Type}
-      ; error -> error
-    end
+check_min(Min, NewNum) when is_integer(NewNum) ->
+    NewMin = min(Min, NewNum)
+  , NewMin
+;
+
+check_min(Min, NewNum) when is_float(NewNum) ->
+    NewMin = min(Min, NewNum)
+  , NewMin
 .
 
 %%% =============================================================== %%%
