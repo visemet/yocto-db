@@ -143,8 +143,7 @@ delegate(
   , {ok, NewState}
 ;
 
-%% @doc Receives the new set of valid indexes and sets it as part
-%%      of the state.
+%% @doc Receives the valid index and sets it as part of the state.
 delegate(_Request = {index, Index}, State = #aggr_stddev{}) ->
     NewState = State#aggr_stddev{index=Index}
   , {ok, NewState}
