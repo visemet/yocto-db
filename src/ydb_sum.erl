@@ -1,7 +1,7 @@
 %% @author Kalpana Suraesh <ksuraesh@caltech.edu>
 
-%% @doc Module for the SUM aggregate function. Tracks the sum
-%%      of the values seen so far.
+%% @doc Module for the SUM aggregate function. Tracks the sum of the
+%%      values seen so far.
 -module(ydb_sum).
 -behaviour(ydb_plan_node).
 
@@ -23,13 +23,13 @@
 -record(aggr_sum, {
     column :: atom() | {atom(), atom()}
   , index :: integer()
-  , curr_sum :: integer()
+  , curr_sum=0 :: integer()
 }).
 
 -type aggr_sum() :: #aggr_sum{
     column :: undefined | atom() | {atom(), atom()}
   , index :: undefined | integer()
-  , curr_sum :: undefined | integer()}.
+  , curr_sum :: integer()}.
 %% Internal sum aggregate state.
 
 -type option() ::
@@ -53,7 +53,7 @@
   | {error, Error :: term()}
 .
 
-%% @doc Starts the input node in the supervisor hierarchy.
+%% @doc Starts the aggregate node in the supervisor hierarchy.
 start_link(Args, Options) ->
     ydb_plan_node:start_link(?MODULE, Args, Options)
 .
@@ -68,7 +68,7 @@ start_link(Args, Options) ->
   | {error, Error :: term()}
 .
 
-%% @doc Starts the input node in the supervisor hierarchy with a
+%% @doc Starts the aggregate node in the supervisor hierarchy with a
 %%      registered name.
 start_link(Name, Args, Options) ->
     ydb_plan_node:start_link(Name, ?MODULE, Args, Options)
@@ -82,7 +82,7 @@ start_link(Name, Args, Options) ->
 .
 
 %% @private
-%% @doc Initializes the input node's internal state.
+%% @doc Initializes the aggregate node's internal state.
 init(Args) when is_list(Args) -> init(Args, #aggr_sum{});
 
 init(_Args) -> {error, {badarg, not_options_list}}.
@@ -229,12 +229,7 @@ get_sum(undefined, NewNum) ->
     NewNum
 ;
 
-get_sum(Sum, NewNum) when is_integer(NewNum) ->
-    NewSum = Sum + NewNum
-  , NewSum
-;
-
-get_sum(Sum, NewNum) when is_float(NewNum) ->
+get_sum(Sum, NewNum) when is_number(NewNum) ->
     NewSum = Sum + NewNum
   , NewSum
 .

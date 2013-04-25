@@ -23,13 +23,13 @@
 -record(aggr_count, {
     column :: atom() | {atom(), atom()}
   , index :: integer()
-  , curr_count :: integer()
+  , curr_count=0 :: integer()
 }).
 
 -type aggr_count() :: #aggr_count{
     column :: undefined | atom() | {atom(), atom()}
   , index :: undefined | integer()
-  , curr_count :: undefined | integer()}.
+  , curr_count :: integer()}.
 %% Internal count aggregate state.
 
 -type option() ::
@@ -68,7 +68,7 @@ start_link(Args, Options) ->
   | {error, Error :: term()}
 .
 
-%% @doc Starts the input node in the supervisor hierarchy with a
+%% @doc Starts the aggregate node in the supervisor hierarchy with a
 %%      registered name.
 start_link(Name, Args, Options) ->
     ydb_plan_node:start_link(Name, ?MODULE, Args, Options)
@@ -82,7 +82,7 @@ start_link(Name, Args, Options) ->
 .
 
 %% @private
-%% @doc Initializes the input node's internal state.
+%% @doc Initializes the aggregate node's internal state.
 init(Args) when is_list(Args) -> init(Args, #aggr_count{});
 
 init(_Args) -> {error, {badarg, not_options_list}}.
@@ -158,7 +158,7 @@ delegate(_Request, State, _Extras) ->
 %%      the supplied input schemas. Expects a single schema.
 compute_schema([Schema], #aggr_count{column=Column}) ->
     {Index, NewSchema} =
-        ydb_aggr_utils:compute_new_schema(Schema, Column, "SUM")
+        ydb_aggr_utils:compute_new_schema(Schema, Column, "COUNT")
     % Inform self of index to check for.
   , ydb_plan_node:relegate(
         erlang:self()
@@ -184,7 +184,7 @@ compute_schema(Schemas, #aggr_count{}) ->
 %% @doc Parses initializing arguments to set up the internal state of
 %%      the count aggregate node.
 init([], State = #aggr_count{}) ->
-    {ok, State#aggr_count{curr_count=0}}
+    {ok, State}
 ;
 
 init([{column, Column} | Args], State = #aggr_count{}) ->

@@ -24,7 +24,7 @@
     column :: atom() | {atom(), atom()}
   , index :: integer()
   , curr_sum :: integer()
-  , curr_count :: integer()
+  , curr_count=0 :: integer()
 }).
 
 -type aggr_avg() :: #aggr_avg{
@@ -37,7 +37,7 @@
 
 -type option() ::
     {column, Column :: atom() | {ColName :: atom(), NewName :: atom()}}.
-%% Options for the SUM aggregate:
+%% Options for the AVG aggregate:
 %% <ul>
 %%   <li><code>{column, Column}</code> - The column name to track the
 %%       average of. <code>Column</code> is either an atom
@@ -56,7 +56,7 @@
   | {error, Error :: term()}
 .
 
-%% @doc Starts the input node in the supervisor hierarchy.
+%% @doc Starts the aggregate node in the supervisor hierarchy.
 start_link(Args, Options) ->
     ydb_plan_node:start_link(?MODULE, Args, Options)
 .
@@ -71,7 +71,7 @@ start_link(Args, Options) ->
   | {error, Error :: term()}
 .
 
-%% @doc Starts the input node in the supervisor hierarchy with a
+%% @doc Starts the aggregate node in the supervisor hierarchy with a
 %%      registered name.
 start_link(Name, Args, Options) ->
     ydb_plan_node:start_link(Name, ?MODULE, Args, Options)
@@ -85,7 +85,7 @@ start_link(Name, Args, Options) ->
 .
 
 %% @private
-%% @doc Initializes the input node's internal state.
+%% @doc Initializes the aggregate node's internal state.
 init(Args) when is_list(Args) -> init(Args, #aggr_avg{});
 
 init(_Args) -> {error, {badarg, not_options_list}}.
@@ -187,7 +187,7 @@ compute_schema(Schemas, #aggr_avg{}) ->
 %% @doc Parses initializing arguments to set up the internal state of
 %%      the avg aggregate node.
 init([], State = #aggr_avg{}) ->
-    {ok, State#aggr_avg{curr_count=0}}
+    {ok, State}
 ;
 
 init([{column, Column} | Args], State = #aggr_avg{}) ->
