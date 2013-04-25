@@ -53,7 +53,7 @@
   | {error, Error :: term()}
 .
 
-%% @doc Starts the input node in the supervisor hierarchy.
+%% @doc Starts the aggregate node in the supervisor hierarchy.
 start_link(Args, Options) ->
     ydb_plan_node:start_link(?MODULE, Args, Options)
 .
@@ -68,7 +68,7 @@ start_link(Args, Options) ->
   | {error, Error :: term()}
 .
 
-%% @doc Starts the input node in the supervisor hierarchy with a
+%% @doc Starts the aggregate node in the supervisor hierarchy with a
 %%      registered name.
 start_link(Name, Args, Options) ->
     ydb_plan_node:start_link(Name, ?MODULE, Args, Options)
@@ -82,7 +82,7 @@ start_link(Name, Args, Options) ->
 .
 
 %% @private
-%% @doc Initializes the input node's internal state.
+%% @doc Initializes the aggregate node's internal state.
 init(Args) when is_list(Args) -> init(Args, #aggr_max{});
 
 init(_Args) -> {error, {badarg, not_options_list}}.
@@ -212,7 +212,7 @@ check_tuple(
   , CurrMax
 ) ->
     RelevantData = element(Index, Data)
-  , NewMax = check_max(CurrMax, RelevantData)
+  , NewMax = get_max(CurrMax, RelevantData)
   , NewTuple = Tuple#ydb_tuple{data=list_to_tuple([NewMax])}
   , ydb_plan_node:notify(
         erlang:self()
@@ -221,20 +221,15 @@ check_tuple(
   , NewMax
 .
 
--spec check_max(Max :: number(), NewNum :: number()) ->
+-spec get_max(Max :: number(), NewNum :: number()) ->
     NewMax :: number().
 
 %% @doc Checks two numbers and returns the maximum of them.
-check_max(undefined, NewNum) ->
+get_max(undefined, NewNum) ->
     NewNum
 ;
 
-check_max(Max, NewNum) when is_integer(NewNum) ->
-    NewMax = max(Max, NewNum)
-  , NewMax
-;
-
-check_max(Max, NewNum) when is_float(NewNum) ->
+get_max(Max, NewNum) when is_number(NewNum) ->
     NewMax = max(Max, NewNum)
   , NewMax
 .

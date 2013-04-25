@@ -53,7 +53,7 @@
   | {error, Error :: term()}
 .
 
-%% @doc Starts the input node in the supervisor hierarchy.
+%% @doc Starts the aggregate node in the supervisor hierarchy.
 start_link(Args, Options) ->
     ydb_plan_node:start_link(?MODULE, Args, Options)
 .
@@ -68,7 +68,7 @@ start_link(Args, Options) ->
   | {error, Error :: term()}
 .
 
-%% @doc Starts the input node in the supervisor hierarchy with a
+%% @doc Starts the aggregate node in the supervisor hierarchy with a
 %%      registered name.
 start_link(Name, Args, Options) ->
     ydb_plan_node:start_link(Name, ?MODULE, Args, Options)
@@ -82,7 +82,7 @@ start_link(Name, Args, Options) ->
 .
 
 %% @private
-%% @doc Initializes the input node's internal state.
+%% @doc Initializes the aggregate node's internal state.
 init(Args) when is_list(Args) -> init(Args, #aggr_min{});
 
 init(_Args) -> {error, {badarg, not_options_list}}.
@@ -212,7 +212,7 @@ check_tuple(
   , CurrMin
 ) ->
     RelevantData = element(Index, Data)
-  , NewMin = check_min(CurrMin, RelevantData)
+  , NewMin = get_min(CurrMin, RelevantData)
   , NewTuple = Tuple#ydb_tuple{data=list_to_tuple([NewMin])}
   , ydb_plan_node:notify(
         erlang:self()
@@ -221,20 +221,15 @@ check_tuple(
   , NewMin
 .
 
--spec check_min(Min :: number(), NewNum :: number()) ->
+-spec get_min(Min :: number(), NewNum :: number()) ->
     NewMin :: number().
 
 %% @doc Checks two numbers and returns the minimum of them.
-check_min(undefined, NewNum) ->
+get_min(undefined, NewNum) ->
     NewNum
 ;
 
-check_min(Min, NewNum) when is_integer(NewNum) ->
-    NewMin = min(Min, NewNum)
-  , NewMin
-;
-
-check_min(Min, NewNum) when is_float(NewNum) ->
+get_min(Min, NewNum) when is_number(NewNum) ->
     NewMin = min(Min, NewNum)
   , NewMin
 .
