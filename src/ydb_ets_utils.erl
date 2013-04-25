@@ -9,7 +9,7 @@
 
 -export([create_table/1, delete_table/1, add_tuples/3, get_copy/2,
     combine_partial_results/2, apply_diffs/2, add_diffs/4, dump_raw/1,
-    dump_tuples/1]).
+    dump_tuples/1, extract_diffs/1, extract_timestamps/2, max_timestamp/2]).
 
 %%% =============================================================== %%%
 %%%  internal records and types                                     %%%
@@ -176,6 +176,70 @@ add_diffs(
 add_diffs(Tid, Diff, Op, Tuples) when is_list(Tuples) ->
     lists:foreach(fun(X) -> add_diffs(Tid, Diff, Op, X) end, Tuples)
   , {ok}
+.
+
+
+%% ----------------------------------------------------------------- %%
+
+-spec extract_diffs(
+    DiffTids :: ets:tid()
+) ->
+    {Ins :: [ydb_tuple()], Dels :: [ydb_tuple()]}
+.
+
+%% @doc Returns the tuples in the table separated into a list of
+%%      tuples to be added, and to be deleted.
+extract_diffs(DiffTids) ->
+    % The MatchSpecs below are produced with the following commands:
+    %   InsSpec = ets:fun2ms(fun ({{'+', _, _}, Tuple}) -> Tuple end).
+    %   DelSpec = ets:fun2ms(fun ({{'-', _, _}, Tuple}) -> Tuple end).
+
+    InsSpec = [{{{'+','_','_'},'$1'},[],['$1']}]
+  , Inserts = lists:flatten(
+        lists:map(fun(X) -> ets:select(X, InsSpec) end, DiffTids))
+
+  , DelSpec = [{{{'-','_','_'},'$1'},[],['$1']}]
+  , Deletes = lists:flatten(
+        lists:map(fun(X) -> ets:select(X, DelSpec) end, DiffTids))
+  , {Inserts, Deletes}
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec extract_timestamps(
+    Tids :: ets:tid()
+  , TableType :: atom()
+) ->
+    Timestamps :: [non_neg_integer()]
+.
+
+extract_timestamps(Tids, syn) ->
+    extract_timestamps(Tids, rel)
+;
+extract_timestamps(Tids, rel) ->
+    Spec = [{{{'_','$1'},'_'},[],['$1']}]
+  , lists:flatten(
+        lists:map(fun(X) -> ets:select(X, Spec) end, Tids))
+;
+extract_timestamps(Tids, diff) ->
+    Spec = [{{{'_','_','$1'},'_'},[],['$1']}]
+  , lists:flatten(
+        lists:map(fun(X) -> ets:select(X, Spec) end, Tids))
+.
+
+-spec max_timestamp(
+    Tids :: ets:tid()
+  , TableType :: atom()
+) ->
+    Timestamps :: [non_neg_integer()]
+.
+
+max_timestamp(Tids, TableType) ->
+    lists:foldl(
+        fun(X, Max) -> max(X, Max) end
+      , -1
+      , extract_timestamps(Tids, TableType)
+    )
 .
 
 %%% =============================================================== %%%
