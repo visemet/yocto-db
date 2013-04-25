@@ -18,7 +18,7 @@ create_table_test() ->
 
 delete_table_test() ->
     {ok, Tid} = ydb_ets_utils:create_table(test)
-  , ?assertEqual({ok}, ydb_ets_utils:delete_table(Tid))
+  , ?assertEqual(ok, ydb_ets_utils:delete_table(Tid))
   , ?assertEqual(undefined, ets:info(Tid))
 .
 

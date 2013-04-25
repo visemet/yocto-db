@@ -47,8 +47,8 @@
 %%       <code>Column</code> which is the name of the column, or the
 %%       tuple <code>{ColName, NewName}</code> which is the current
 %%       name of the column and the desired new name.</li>
-%%    <li><code>{init_tid, Tid}</code> - The Tid of the table to read from
-%%       initially.</li>
+%%    <li><code>{init_tid, Tid}</code> - The Tid of the table to read
+%%       from initially.</li>
 %% </ul>
 
 %%% =============================================================== %%%
@@ -136,8 +136,7 @@ delegate(
   , {ok, State}
 ;
 
-%% @doc Receives the new set of valid indexes and sets it as part
-%%      of the state.
+%% @doc Receives the valid index and sets it as part of the state.
 delegate(_Request = {index, Index}, State = #aggr_sum{}) ->
     NewState = State#aggr_sum{index=Index}
   , {ok, NewState}
