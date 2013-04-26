@@ -243,6 +243,38 @@ handle_cast(
     end
 ;
 
+handle_cast(
+    {tuples, Tuples}
+  , State = #branch_node{schemas = Schemas, timestamps = Timestamps}
+) when
+    is_list(Tuples)
+  ->
+    DictSchemas = dict:from_list(Schemas)
+  , DictTimestamps = dict:from_list(Timestamps)
+
+  , lists:foreach(
+        fun (Tuple) ->
+            Type = erlang:element(1, Tuple) % {**Type, ...}
+
+          , TypeSchema = dict:fetch(Type, DictSchemas)
+          , TypeTimestamp = dict:fetch(Type, DictTimestamps)
+
+          , NewTuple = ydb_input_node_utils:make_tuple(
+                TypeTimestamp
+              , TypeSchema
+              , Tuple
+            )
+
+          , handle_cast({notify, Type, {tuples, [NewTuple]}}, State)
+        end
+
+      , Tuples
+    )
+
+
+  , {ok, State}
+;
+
 handle_cast(_Request, State) ->
     {noreply, State}
 .
