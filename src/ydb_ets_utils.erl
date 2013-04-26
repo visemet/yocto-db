@@ -56,7 +56,7 @@ dump_raw(Tid) ->
 dump_tuples(Tid) ->
     lists:flatten(ets:match(Tid, {'_', '$1'}))
 .
-    
+
 -spec dump_tuples(Tid :: ets:tid(), Key :: atom()) -> [ydb_tuple()].
 
 %% @doc Returns a list of all the ydb_tuples of a particular Op in
@@ -206,7 +206,7 @@ add_diffs(Tid, Diff, Op, Tuples) when is_list(Tuples) ->
 %% ----------------------------------------------------------------- %%
 
 -spec extract_diffs(
-    DiffTids :: ets:tid()
+    DiffTids :: [ets:tid()]
 ) ->
     {Ins :: [ydb_plan_node:ydb_tuple()], Dels :: [ydb_plan_node:ydb_tuple()]}
 .
@@ -246,7 +246,7 @@ extract_timestamps(Tuples) ->
 .
 
 -spec extract_timestamps(
-    Tids :: ets:tid()
+    Tids :: [ets:tid()]
   , TableType :: atom()
 ) ->
     Timestamps :: [non_neg_integer()]
@@ -283,10 +283,10 @@ max_timestamp(Tuples) when is_list(Tuples) ->
 .
 
 -spec max_timestamp(
-    Tids :: ets:tid()
+    Tids :: [ets:tid()]
   , TableType :: atom()
 ) ->
-    Timestamps :: [non_neg_integer()]
+    Timestamps :: non_neg_integer()
 .
 
 %% @doc TODO
