@@ -257,6 +257,7 @@ check_tuple(
   , NewMin = get_min(CurrMin, RelevantData)
   , NewTuple = Tuple#ydb_tuple{data=list_to_tuple([NewMin])}
   , ydb_ets_utils:add_tuples(OutTid, min, NewTuple)
+  , ydb_ets_utils:add_tuples(OutTid, inter_min, NewTuple)
   , NewMin
 .
 
@@ -310,7 +311,6 @@ apply_diffs(Tids, Index, CurrMin, OutTid) ->
       , CurrMin
       , Ins
     )
-  , io:format("HERE ~w~n~n~n", [InterMin])  
     
     % Store intermediate min into ets table.
   , InterTuple = #ydb_tuple{
@@ -335,12 +335,10 @@ apply_diffs(Tids, Index, CurrMin, OutTid) ->
 
 %% @doc Updates the minimum if a new number is added in.
 add(undefined, NewNum) ->
-io:format("GOOD", []),
     NewNum
 ;
 
 add(Min, NewNum) when is_number(NewNum) ->
-   io:format("WHAT", []),
     min(Min, NewNum)
 .
 
