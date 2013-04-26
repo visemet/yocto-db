@@ -99,7 +99,7 @@ delegate(
 ) ->
     ydb_plan_node:notify(
         erlang:self()
-      , {tuples, erlang:binary_to_term(RawData)}
+      , {'$gen_cast', {tuples, erlang:binary_to_term(RawData)}}
     )
 
   , {ok, State}

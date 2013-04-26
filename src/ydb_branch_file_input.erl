@@ -119,7 +119,7 @@ delegate(
 ) ->
     case read(IoDevice, BatchSize) of
         {continue, Data} ->
-            ydb_plan_node:notify(erlang:self(), {tuples, Data})
+            ydb_plan_node:notify(erlang:self(), {'$gen_cast', {tuples, Data}})
 
           , timer:apply_after(
                 PokeFreq
@@ -131,7 +131,7 @@ delegate(
           , {ok, State}
 
       ; {done, Data} ->
-            ydb_plan_node:notify(erlang:self(), {tuples, Data})
+            ydb_plan_node:notify(erlang:self(), {'$gen_cast', {tuples, Data}})
 
           , file:close(IoDevice)
 
