@@ -199,7 +199,7 @@ handle_cast(
   , TypeListeners = dict:fetch(Type, DictListeners)
 
   , lists:foreach(
-        fun (Subscriber) when is_pid(Subscriber) ->
+        fun ({Subscriber, _Ref}) when is_pid(Subscriber) ->
             Subscriber ! Message
         end
 
@@ -276,7 +276,7 @@ handle_cast(
     )
 
 
-  , {ok, State}
+  , {noreply, State}
 ;
 
 handle_cast(_Request, State) ->
