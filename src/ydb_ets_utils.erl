@@ -8,7 +8,7 @@
 -include("ydb_plan_node.hrl").
 
 -export([create_table/1, delete_table/1, add_tuples/3, delete_tuples/2,
-         delete_tuples/3, replace_tuple/4]).
+    delete_tuples/3, replace_tuple/4]).
 -export([dump_raw/1, dump_tuples/1, dump_tuples/2, extract_diffs/1,
     extract_timestamps/1, extract_timestamps/2, get_copy/2]).
 -export([apply_diffs/2, add_diffs/4, combine_partial_results/2,
@@ -317,7 +317,7 @@ max_timestamp(Tuples) when is_list(Tuples) ->
     Timestamps :: non_neg_integer()
 .
 
-%% @doc TODO
+%% @doc Finds the maximum timestamp stored in a list of ETS tables.
 max_timestamp(Tids, TableType) ->
     lists:foldl(
         fun(X, Max) -> max(X, Max) end

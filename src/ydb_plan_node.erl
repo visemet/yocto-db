@@ -147,7 +147,10 @@ remove_listener(PlanNode, Subscriber)
 -spec relegate(pid(), term()) -> ok.
 
 %% @doc Processes the message with the specific type of plan node.
-relegate(PlanNode, Message) when is_pid(PlanNode) ->
+relegate(PlanNode, Message)
+  when
+    is_pid(PlanNode) orelse is_atom(PlanNode)
+  ->
     gen_server:cast(PlanNode, {relegate, Message})
 .
 
@@ -157,7 +160,7 @@ relegate(PlanNode, Message) when is_pid(PlanNode) ->
 %%      including the additional state information.
 relegate(PlanNode, Message, Extras)
   when
-    is_pid(PlanNode)
+    is_pid(PlanNode) orelse is_atom(PlanNode)
   , is_list(Extras)
   ->
     gen_server:cast(PlanNode, {relegate, Message, Extras})
@@ -343,6 +346,23 @@ handle_cast(
 
               ; (PlanNode) when is_function(PlanNode, 0) ->
                 case add_listener(PlanNode(), erlang:self()) of
+                    {ok, Schema} -> Schema
+
+                  ; {error, already_subscribed} -> []
+                end
+
+              ; ({BranchNode, BranchType})
+              when
+                is_pid(BranchNode)
+              , is_atom(BranchType)
+              ->
+                Result = ydb_branch_node:add_listener(
+                    BranchNode
+                  , BranchType
+                  , erlang:self()
+                )
+
+              , case Result of
                     {ok, Schema} -> Schema
 
                   ; {error, already_subscribed} -> []

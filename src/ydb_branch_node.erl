@@ -134,7 +134,11 @@ handle_call(
   , is_pid(Subscriber)
   ->
     DictListeners = dict:from_list(Listeners)
-  , TypeListeners = dict:fetch(Type, DictListeners)
+  , TypeListeners = case dict:find(Type, DictListeners) of
+        {ok, Value} -> Value
+
+      ; error -> sets:new()
+    end
 
   , case get_ref(Subscriber, sets:to_list(TypeListeners)) of
         % `Subscriber' is not already a listener
@@ -195,7 +199,7 @@ handle_cast(
   , TypeListeners = dict:fetch(Type, DictListeners)
 
   , lists:foreach(
-        fun (Subscriber) when is_pid(Subscriber) ->
+        fun ({Subscriber, _Ref}) when is_pid(Subscriber) ->
             Subscriber ! Message
         end
 
@@ -241,6 +245,38 @@ handle_cast(
 
           , {noreply, State#branch_node{listeners=NewListeners}}
     end
+;
+
+handle_cast(
+    {tuples, Tuples}
+  , State = #branch_node{schemas = Schemas, timestamps = Timestamps}
+) when
+    is_list(Tuples)
+  ->
+    DictSchemas = dict:from_list(Schemas)
+  , DictTimestamps = dict:from_list(Timestamps)
+
+  , lists:foreach(
+        fun (Tuple) ->
+            Type = erlang:element(1, Tuple) % {**Type, ...}
+
+          , TypeSchema = dict:fetch(Type, DictSchemas)
+          , TypeTimestamp = dict:fetch(Type, DictTimestamps)
+
+          , NewTuple = ydb_input_node_utils:make_tuple(
+                TypeTimestamp
+              , TypeSchema
+              , Tuple
+            )
+
+          , handle_cast({notify, Type, {tuples, [NewTuple]}}, State)
+        end
+
+      , Tuples
+    )
+
+
+  , {noreply, State}
 ;
 
 handle_cast(_Request, State) ->
