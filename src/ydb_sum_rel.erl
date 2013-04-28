@@ -1,7 +1,7 @@
 %% @author Kalpana Suraesh <ksuraesh@caltech.edu>
 
 %% @doc Module for the relation-to-relation SUM aggregate function.
-%% Tracks the sum of the values seen so far.
+%%      Tracks the sum of the values seen so far.
 -module(ydb_sum_rel).
 -behaviour(ydb_plan_node).
 
@@ -209,14 +209,15 @@ post_init(State=#aggr_sum{}) ->
   , CurrSum :: number()
   , OutTid :: ets:tid()
 ) ->
-    NewTuple :: ydb_tuple()
+    NewTuple :: ydb_plan_node:ydb_tuple()
 .
 
-%% @doc TODO
+%% @doc Apply the diffs, update the sum, and output the results to the
+%%      listeners.
 apply_diffs(Tids, Index, CurrSum, OutTid) ->
     {Ins, Dels} = ydb_ets_utils:extract_diffs(Tids)
 
-    % apply all inserts, then deletes
+    % Apply all inserts, then deletes.
   , InterSum = lists:foldl(
         fun(X, Curr) -> add(Curr, element(Index, X#ydb_tuple.data)) end
       , CurrSum
@@ -228,29 +229,29 @@ apply_diffs(Tids, Index, CurrSum, OutTid) ->
       , Dels
     )
 
-    % create a new tuple from this sum
+    % Create a new tuple from this sum.
   , NewTuple = #ydb_tuple{
         data=list_to_tuple([NewSum])
       , timestamp=ydb_ets_utils:max_timestamp(Tids, diff)
     }
 
-    % add tuple to diffs table
+    % Add tuple to diffs table.
   , ydb_ets_utils:add_diffs(OutTid, '+', sum, NewTuple)
 
-    % send to listeners
+    % Send to listeners.
   , ydb_plan_node:notify(
         erlang:self()
       , {diffs, OutTid}
     )
 
-    % return value to update state
+    % Return value to update state.
   , NewTuple
 .
 
 %% ----------------------------------------------------------------- %%
 
 -spec add(Sum :: number(), NewNum :: number()) ->
-    NewMin :: number().
+    NewSum :: number().
 
 %% @doc Gets the sum of two numbers.
 add(undefined, NewNum) ->
@@ -264,7 +265,7 @@ add(Sum, NewNum) when is_number(NewNum) ->
 %% ----------------------------------------------------------------- %%
 
 -spec sub(Sum :: number(), NewNum :: number()) ->
-    NewMin :: number().
+    NewSum :: number().
 
 %% @doc Gets the difference of two numbers.
 sub(undefined, NewNum) ->

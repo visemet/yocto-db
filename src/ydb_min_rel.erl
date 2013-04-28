@@ -1,7 +1,7 @@
-%% @author Kalpana Suraesh <ksuraesh@caltech.edu>
+%% @author Angela Gong <anjoola@anjoola.com>
 
-%% @doc Module for the MIN aggregate function. Tracks the min of the
-%%      values seen so far.
+%% @doc Module for the relation-to-relation MIN aggregate function.
+%%      Tracks the min of the values seen so far.
 -module(ydb_min_rel).
 -behaviour(ydb_plan_node).
 
@@ -26,21 +26,17 @@
     column :: atom() | {atom(), atom()}
   , index :: integer()
   , tid :: ets:tid()
-  , init_tid :: ets:tid()
-  , curr_min :: integer()
 }).
 
 -type aggr_min() :: #aggr_min{
     column :: undefined | atom() | {atom(), atom()}
   , index :: undefined | integer()
   , tid :: undefined | ets:tid()
-  , init_tid :: undefined | ets:tid()
-  , curr_min :: undefined | integer()}.
+}.
 %% Internal min aggregate state.
 
 -type option() ::
     {column, Column :: atom() | {ColName :: atom(), NewName :: atom()}}
-  | {init_tid, Tid :: ets:tid()}
 .
 %% Options for the MIN aggregate:
 %% <ul>
@@ -49,8 +45,6 @@
 %%       <code>Column</code> which is the name of the column, or the
 %%       tuple <code>{ColName, NewName}</code> which is the current
 %%       name of the column and the desired new name.</li>
-%%    <li><code>{init_tid, Tid}</code> - The Tid of the table to read
-%%       from initially.</li>
 %% </ul>
 
 %%% =============================================================== %%%
@@ -105,43 +99,21 @@ init(_Args) -> {error, {badarg, not_options_list}}.
 %% @doc Writes the new min to its output table.
 delegate(
     _Request = {diffs, Tids}
-  , State = #aggr_min{
-        curr_min=CurrMin
-      , index=Index
-      , tid=Tid
-    }
-) ->
-    NewMin = apply_diffs(Tids, Index, CurrMin, Tid)
-  , NewState = State#aggr_min{curr_min=NewMin}
-  , {ok, NewState}
-;
-
-%% @doc Reads values from a table and adds them to the min.
-delegate(
-    _Request = {read_table, Tid}
-  , State = #aggr_min{curr_min=CurrMin, index=Index, tid=OutTid}
-) ->
-    Tuples = ydb_ets_utils:dump_tuples(Tid)
-  , NewMin = lists:foldl(
-        fun(Tuple, Min) ->
-            check_tuple(Tuple, Index, Min, OutTid)
-        end
-      , CurrMin
-      , Tuples
-    )
-  , NewState = State#aggr_min{curr_min=NewMin}
-  , {ok, NewState}
-;
-
-%% @doc Sends output Tid to requesting Pid.
-delegate(
-    _Request = {get_output, ReqPid}
-  , State = #aggr_min{tid=Tid}
-) ->
-    ReqPid ! Tid
+  , State = #aggr_min{index=Index, tid=SynTid}
+) when is_list(Tids) ->
+    {ok, OutTid} = ydb_ets_utils:create_table(min)
+    
+  , [CurrTuple] = ydb_ets_utils:dump_tuples(SynTid, min)
+  , {CurrMin} = CurrTuple#ydb_tuple.data
+  
+  , ydb_ets_utils:add_diffs(OutTid, '-', min, CurrTuple)
+  , NewTuple = apply_diffs(Tids, Index, CurrMin, OutTid, SynTid)
+  
+  , ydb_ets_utils:replace_tuple(SynTid, min, CurrTuple, NewTuple)
   , {ok, State}
 ;
 
+%% @private
 %% @doc Receives the valid index and sets it as part of the state.
 delegate(_Request = {index, Index}, State = #aggr_min{}) ->
     NewState = State#aggr_min{index=Index}
@@ -178,6 +150,7 @@ delegate(_Request, State, _Extras) ->
   | {error, {badarg, InputSchemas :: [ydb_plan_node:ydb_schema()]}}
 .
 
+%% @private
 %% @doc Returns the output schema of the min aggregate based upon the
 %%      supplied input schemas. Expects a single schema.
 compute_schema([Schema], #aggr_min{column=Column}) ->
@@ -216,10 +189,6 @@ init([{column, Column} | Args], State = #aggr_min{}) ->
     init(Args, State#aggr_min{column=Column})
 ;
 
-init([{tid, Tid} | Args], State = #aggr_min{}) ->
-    init(Args, State#aggr_min{init_tid=Tid})
-;
-
 init([Term | _Args], #aggr_min{}) ->
     {error, {badarg, Term}}
 .
@@ -229,56 +198,17 @@ init([Term | _Args], #aggr_min{}) ->
 %% @private
 %% @doc Creates the output tables.
 post_init(State=#aggr_min{}) ->
-    {ok, Tid} = ydb_ets_utils:create_table(min)
+    {ok, Tid} = ydb_ets_utils:create_table(min_synopsis)
+  , Tuple = #ydb_tuple{timestamp=0, data={null}}
+  , ydb_ets_utils:add_tuples(Tid, min, Tuple)
   , {ok, State#aggr_min{tid=Tid}}
 .
 
 %% ----------------------------------------------------------------- %%
 
--spec check_tuple(
-    Tuple :: ydb_plan_node:ydb_tuple()
-  , Index :: integer()
-  , CurrMin :: number()
-  , OutTid :: ets:tid()
-) ->
-    NewMin :: integer()
-.
-
-%% @private
-%% @doc Selects only the necessary column required for finding the min
-%%      and updates the current min.
-check_tuple(
-    Tuple=#ydb_tuple{data=Data}
-  , Index
-  , CurrMin
-  , OutTid
-) ->
-    RelevantData = element(Index, Data)
-  , NewMin = get_min(CurrMin, RelevantData)
-  , NewTuple = Tuple#ydb_tuple{data=list_to_tuple([NewMin])}
-  , ydb_ets_utils:add_tuples(OutTid, min, NewTuple)
-  , ydb_ets_utils:add_tuples(OutTid, inter_min, NewTuple)
-  , NewMin
-.
-
-%% ----------------------------------------------------------------- %%
-
--spec get_min(Min :: number(), NewNum :: number()) ->
-    NewMin :: number()
-.
-
-%% @doc Gets the min of two numbers.
-get_min(undefined, NewNum) ->
-    NewNum
-;
-
-get_min(Min, NewNum) when is_number(NewNum) ->
-    NewMin = min(Min, NewNum)
-  , NewMin
-.
-
 -spec get_mins(Tuples :: [ydb_plan_node:ydb_tuple()]) -> Min :: number().
 
+%% @private
 %% @doc Gets the minimum from a list of intermediate mins stored as
 %%      ydb_tuples.
 get_mins(Tuples) when is_list(Tuples) ->
@@ -296,36 +226,48 @@ get_mins(Tuples) when is_list(Tuples) ->
   , Index :: integer()
   , CurrMin :: number()
   , OutTid :: ets:tid()
+  , SynTid :: ets:tid()
 ) ->
-    NewMin :: number()
+    NewTuple :: ydb_plan_node:ydb_tuple()
 .
 
-%% @doc TODO
-apply_diffs(Tids, Index, CurrMin, OutTid) ->
+%% @doc Apply the diffs, update the minimum, and output the results to
+%%      the listeners.
+apply_diffs(Tids, Index, CurrMin, OutTid, SynTid) ->
     {Ins, Dels} = ydb_ets_utils:extract_diffs(Tids)
-  , Timestamp = ydb_ets_utils:max_timestamp(Tids, diff)
 
-    % Apply all the inserts, then deletes.
+    % Apply all the inserts.
   , InterMin = lists:foldl(
         fun(X, Curr) -> add(Curr, element(Index, X#ydb_tuple.data)) end
       , CurrMin
       , Ins
     )
-    
     % Store intermediate min into ets table.
+  , Timestamp = ydb_ets_utils:max_timestamp(Tids, diff)
   , InterTuple = #ydb_tuple{
         data=list_to_tuple([InterMin])
       , timestamp=Timestamp
     }
-  , ydb_ets_utils:add_tuples(OutTid, inter_min, InterTuple)
+  , ydb_ets_utils:add_tuples(SynTid, inter_min, InterTuple)
   
-  , NewMin = sub(InterMin, Dels, OutTid)
+    % Apply all the deletes.
+  , NewMin = sub(Dels, SynTid)
   , NewTuple = #ydb_tuple{
         data=list_to_tuple([NewMin])
       , timestamp=Timestamp
     }
-  , ydb_ets_utils:add_tuples(OutTid, min, NewTuple)
-  , NewMin
+    
+    % Add tuple to diffs table.
+  , ydb_ets_utils:add_diffs(OutTid, '+', min, NewTuple)
+  
+    % Send to listeners.
+  , ydb_plan_node:notify(
+        erlang:self()
+      , {diffs, OutTid}
+    )
+    
+    % Return value to update state.
+  , NewTuple
 .
 
 %% ----------------------------------------------------------------- %%
@@ -342,25 +284,23 @@ add(Min, NewNum) when is_number(NewNum) ->
     min(Min, NewNum)
 .
 
+%% ----------------------------------------------------------------- %%
+
 -spec sub(
-    Min :: number()
-  , Dels :: [ydb_plan_node:ydb_tuple()]
-  , Tid :: ets:tid()
+    Dels :: [ydb_plan_node:ydb_tuple()]
+  , SynTid :: ets:tid()
 ) ->
     NewMin :: number().
 
 %% @doc Updates the minimum if a number is removed.
-sub(undefined, NewNum, _Tid) ->
-    NewNum
-;
-
-sub(Min, Dels, Tid) ->
+sub(Dels, SynTid) ->
     % Delete min entry that has fallen out.
     Timestamp = ydb_ets_utils:max_timestamp(Dels)
-  , ydb_ets_utils:delete_tuples(Tid, {inter_min, Timestamp})
+  , ydb_ets_utils:delete_tuples(SynTid, {inter_min, Timestamp})
+  
     % Compute the new min.
-  , InterMins = ydb_ets_utils:dump_tuples(Tid, inter_min)
-  , NewMin = min(Min, get_mins(InterMins))
+  , InterMins = ydb_ets_utils:dump_tuples(SynTid, inter_min)
+  , NewMin = get_mins(InterMins)
   , NewMin
 .
 
