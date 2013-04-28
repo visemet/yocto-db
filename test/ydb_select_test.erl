@@ -56,7 +56,7 @@ test_setup(Predicate, NumResults) ->
     % The select node
   , {ok, SelectPid} = ydb_select:start_link([
         {predicate, Predicate}
-    ], [{schema, Schema}])
+    ], [{listen, [InPid]}])
   , ydb_plan_node:add_listener(InPid, SelectPid)
   , Listener = spawn(?MODULE, start_link_test_helper, [self(), 0, NumResults])
   , ydb_plan_node:add_listener(SelectPid, Listener)

@@ -107,6 +107,12 @@ delegate(
   , {ok, State}
 ;
 
+delegate(_Request = {schema, Schema}, State) ->
+    NewState = State#select{schema=Schema}
+  , {ok, NewState}
+;
+
+
 delegate(_Request = {info, Message}, State) ->
     delegate(Message, State)
 ;
@@ -122,13 +128,6 @@ delegate(_Request, State) ->
 ) ->
     {ok, NewState :: select()}
 .
-
-%% @private
-%% @doc Receives the schema of the tuples and adds it to the state.
-delegate(_Request = {get_schema}, State, _Extras = [Schema, _Timestamp]) ->
-    NewState = State#select{schema=Schema}
-  , {ok, NewState}
-;
 
 delegate(_Request, State, _Extras) ->
     {ok, State}
@@ -147,7 +146,11 @@ delegate(_Request, State, _Extras) ->
 %% @doc Returns the output schema of the select node based upon the
 %%      supplied input schemas. Expects a single schema.
 compute_schema([Schema], #select{}) ->
-    {ok, Schema}
+     ydb_plan_node:relegate(
+        erlang:self()
+      , {schema, Schema}
+    )
+  , {ok, Schema}
 ;
 
 compute_schema(Schemas, #select{}) ->
@@ -167,7 +170,7 @@ compute_schema(Schemas, #select{}) ->
 %% @doc Parses initializing arguments to set up the internal state of
 %%      the select node.
 init([], State = #select{}) ->
-    post_init(State)
+    {ok, State}
 ;
 
 init([{predicate, Predicate} | Args], State = #select{}) ->
@@ -176,19 +179,6 @@ init([{predicate, Predicate} | Args], State = #select{}) ->
 
 init([Term | _Args], #select{}) ->
     {error, {badarg, Term}}
-.
-
--spec post_init(State :: select()) -> {ok, NewState :: select()}.
-
-%% @private
-%% @doc Gets the schema for the tuples.
-post_init(State = #select{}) ->
-    ydb_plan_node:relegate(
-        erlang:self()
-      , {get_schema}
-      , [schema, timestamp]
-    )
-  , {ok, State}
 .
 
 -spec check_tuple(
