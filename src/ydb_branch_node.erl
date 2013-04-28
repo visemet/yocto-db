@@ -134,7 +134,11 @@ handle_call(
   , is_pid(Subscriber)
   ->
     DictListeners = dict:from_list(Listeners)
-  , TypeListeners = dict:fetch(Type, DictListeners)
+  , TypeListeners = case dict:find(Type, DictListeners) of
+        {ok, Value} -> Value
+
+      ; error -> sets:new()
+    end
 
   , case get_ref(Subscriber, sets:to_list(TypeListeners)) of
         % `Subscriber' is not already a listener
