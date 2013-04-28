@@ -41,6 +41,94 @@ make_nonjoin({}, _PrevId, _History, Result) ->
 ;
 
 make_nonjoin(
+    {Type = select, Next, Predicate}
+  , PrevId
+  , History
+  , Result
+) when
+    is_tuple(Next)
+  , is_atom(PrevId) orelse is_tuple(PrevId)
+  , is_list(Result)
+  ->
+    CurrId = case dict:find(Type, History) of
+        {ok, Value} -> {Type, Value}
+
+      ; error -> {Type, 0}
+    end
+
+  , Listen = case PrevId of
+        % Listens to an input stream
+        {InputStream, BranchType}
+          when
+            is_atom(InputStream)
+          , is_atom(BranchType)
+          ->
+            {ydb_sup_utils:get_branch_pid(InputStream), BranchType}
+
+        % Listens to another node in the query
+      ; {PrevType, PrevValue}
+          when
+            is_atom(PrevType)
+          , is_integer(PrevValue)
+          ->
+            ydb_sup_utils:pid_fun(PrevId)
+    end
+
+  , ChildSpec = prepare_child_spec(CurrId, {ydb_select, start_link, [
+        [{predicate, Predicate}]
+      , [{listen, [Listen]}]
+    ]})
+
+  , NewHistory = dict:update_counter(Type, 1, History)
+
+  , make_nonjoin(Next, CurrId, NewHistory, [ChildSpec|Result])
+;
+
+make_nonjoin(
+    {Type = project, Next, Columns}
+  , PrevId
+  , History
+  , Result
+) when
+    is_tuple(Next)
+  , is_atom(PrevId) orelse is_tuple(PrevId)
+  , is_list(Result)
+  ->
+    CurrId = case dict:find(Type, History) of
+        {ok, Value} -> {Type, Value}
+
+      ; error -> {Type, 0}
+    end
+
+  , Listen = case PrevId of
+        % Listens to an input stream
+        {InputStream, BranchType}
+          when
+            is_atom(InputStream)
+          , is_atom(BranchType)
+          ->
+            {ydb_sup_utils:get_branch_pid(InputStream), BranchType}
+
+        % Listens to another node in the query
+      ; {PrevType, PrevValue}
+          when
+            is_atom(PrevType)
+          , is_integer(PrevValue)
+          ->
+            ydb_sup_utils:pid_fun(PrevId)
+    end
+
+  , ChildSpec = prepare_child_spec(CurrId, {ydb_project, start_link, [
+        [{columns, Columns}]
+      , [{listen, [Listen]}]
+    ]})
+
+  , NewHistory = dict:update_counter(Type, 1, History)
+
+  , make_nonjoin(Next, CurrId, NewHistory, [ChildSpec|Result])
+;
+
+make_nonjoin(
     {Type = file_output, Next, Filename}
   , PrevId
   , History
@@ -76,6 +164,50 @@ make_nonjoin(
 
   , ChildSpec = prepare_child_spec(CurrId, {ydb_file_output, start_link, [
         [{filename, Filename}]
+      , [{listen, [Listen]}]
+    ]})
+
+  , NewHistory = dict:update_counter(Type, 1, History)
+
+  , make_nonjoin(Next, CurrId, NewHistory, [ChildSpec|Result])
+;
+
+make_nonjoin(
+    {Type = socket_output, Next, PortNo, Addr}
+  , PrevId
+  , History
+  , Result
+) when
+    is_tuple(Next)
+  , is_atom(PrevId) orelse is_tuple(PrevId)
+  , is_list(Result)
+  ->
+    CurrId = case dict:find(Type, History) of
+        {ok, Value} -> {Type, Value}
+
+      ; error -> {Type, 0}
+    end
+
+  , Listen = case PrevId of
+        % Listens to an input stream
+        {InputStream, BranchType}
+          when
+            is_atom(InputStream)
+          , is_atom(BranchType)
+          ->
+            {ydb_sup_utils:get_branch_pid(InputStream), BranchType}
+
+        % Listens to another node in the query
+      ; {PrevType, PrevValue}
+          when
+            is_atom(PrevType)
+          , is_integer(PrevValue)
+          ->
+            ydb_sup_utils:pid_fun(PrevId)
+    end
+
+  , ChildSpec = prepare_child_spec(CurrId, {ydb_socket_output, start_link, [
+        [{port_no, PortNo}, {address, Addr}]
       , [{listen, [Listen]}]
     ]})
 
