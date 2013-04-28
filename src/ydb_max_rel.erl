@@ -1,8 +1,8 @@
 %% @author Angela Gong <anjoola@anjoola.com>
 
-%% @doc Module for the relation-to-relation MIN aggregate function.
-%%      Tracks the min of the values seen so far.
--module(ydb_min_rel).
+%% @doc Module for the relation-to-relation MAX aggregate function.
+%%      Tracks the max of the values seen so far.
+-module(ydb_max_rel).
 -behaviour(ydb_plan_node).
 
 -export([start_link/2, start_link/3]).
@@ -20,26 +20,26 @@
 %%%  internal records and types                                     %%%
 %%% =============================================================== %%%
 
--record(aggr_min, {
+-record(aggr_max, {
     column :: atom() | {atom(), atom()}
   , index :: integer()
   , tid :: ets:tid()
 }).
 
--type aggr_min() :: #aggr_min{
+-type aggr_max() :: #aggr_max{
     column :: undefined | atom() | {atom(), atom()}
   , index :: undefined | integer()
   , tid :: undefined | ets:tid()
 }.
-%% Internal min aggregate state.
+%% Internal max aggregate state.
 
 -type option() ::
     {column, Column :: atom() | {ColName :: atom(), NewName :: atom()}}
 .
-%% Options for the MIN aggregate:
+%% Options for the MAX aggregate:
 %% <ul>
 %%   <li><code>{column, Column}</code> - The column name to track the
-%%       min of. <code>Column</code> is either an atom
+%%       max of. <code>Column</code> is either an atom
 %%       <code>Column</code> which is the name of the column, or the
 %%       tuple <code>{ColName, NewName}</code> which is the current
 %%       name of the column and the desired new name.</li>
@@ -79,44 +79,44 @@ start_link(Name, Args, Options) ->
 %% ----------------------------------------------------------------- %%
 
 -spec init(Args :: [option()]) ->
-    {ok, State :: aggr_min()}
+    {ok, State :: aggr_max()}
   | {error, {badarg, Term :: term()}}
 .
 
 %% @private
 %% @doc Initializes the aggregate node's internal state.
-init(Args) when is_list(Args) -> init(Args, #aggr_min{});
+init(Args) when is_list(Args) -> init(Args, #aggr_max{});
 
 init(_Args) -> {error, {badarg, not_options_list}}.
 
--spec delegate(Request :: atom(), State :: aggr_min()) ->
-    {ok, State :: aggr_min()}
+-spec delegate(Request :: atom(), State :: aggr_max()) ->
+    {ok, State :: aggr_max()}
 .
 
 %% @private
-%% @doc Writes the new min to its output table.
+%% @doc Writes the new max to its output table.
 delegate(
     _Request = {diffs, Tids}
-  , State = #aggr_min{index=Index, tid=SynTid}
+  , State = #aggr_max{index=Index, tid=SynTid}
 ) when is_list(Tids) ->
-    {ok, OutTid} = ydb_ets_utils:create_table(min)
+    {ok, OutTid} = ydb_ets_utils:create_table(max)
     
-  , [CurrTuple] = ydb_ets_utils:dump_tuples(SynTid, min)
-  , {CurrMin} = CurrTuple#ydb_tuple.data
+  , [CurrTuple] = ydb_ets_utils:dump_tuples(SynTid, max)
+  , {CurrMax} = CurrTuple#ydb_tuple.data
   
     % Update the tuple the output.
-  , ydb_ets_utils:add_diffs(OutTid, '-', min, CurrTuple)
-  , NewTuple = apply_diffs(Tids, Index, CurrMin, OutTid, SynTid)
+  , ydb_ets_utils:add_diffs(OutTid, '-', max, CurrTuple)
+  , NewTuple = apply_diffs(Tids, Index, CurrMax, OutTid, SynTid)
   
     % Update the tuple in the synopsis table.
-  , ydb_ets_utils:replace_tuple(SynTid, min, CurrTuple, NewTuple)
+  , ydb_ets_utils:replace_tuple(SynTid, max, CurrTuple, NewTuple)
   , {ok, State}
 ;
 
 %% @private
 %% @doc Receives the valid index and sets it as part of the state.
-delegate(_Request = {index, Index}, State = #aggr_min{}) ->
-    NewState = State#aggr_min{index=Index}
+delegate(_Request = {index, Index}, State = #aggr_max{}) ->
+    NewState = State#aggr_max{index=Index}
   , {ok, NewState}
 ;
 
@@ -130,10 +130,10 @@ delegate(_Request, State) ->
 
 -spec delegate(
     Request :: atom()
-  , State :: aggr_min()
+  , State :: aggr_max()
   , Extras :: list()
 ) ->
-    {ok, NewState :: aggr_min()}
+    {ok, NewState :: aggr_max()}
 .
 
 delegate(_Request, State, _Extras) ->
@@ -144,18 +144,18 @@ delegate(_Request, State, _Extras) ->
 
 -spec compute_schema(
     InputSchemas :: [ydb_plan_node:ydb_schema()]
-  , State :: aggr_min()
+  , State :: aggr_max()
 ) ->
     {ok, OutputSchema :: ydb_plan_node:ydb_schema()}
   | {error, {badarg, InputSchemas :: [ydb_plan_node:ydb_schema()]}}
 .
 
 %% @private
-%% @doc Returns the output schema of the min aggregate based upon the
+%% @doc Returns the output schema of the max aggregate based upon the
 %%      supplied input schemas. Expects a single schema.
-compute_schema([Schema], #aggr_min{column=Column}) ->
+compute_schema([Schema], #aggr_max{column=Column}) ->
     {Index, NewSchema} =
-        ydb_aggr_utils:compute_new_schema(Schema, Column, "MIN")
+        ydb_aggr_utils:compute_new_schema(Schema, Column, "MAX")
     % Inform self of index to check for.
   , ydb_plan_node:relegate(
         erlang:self()
@@ -164,7 +164,7 @@ compute_schema([Schema], #aggr_min{column=Column}) ->
   , {ok, NewSchema}
 ;
 
-compute_schema(Schemas, #aggr_min{}) ->
+compute_schema(Schemas, #aggr_max{}) ->
     {error, {badarg, Schemas}}
 .
 
@@ -173,23 +173,23 @@ compute_schema(Schemas, #aggr_min{}) ->
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
--spec init([option()], State :: aggr_min()) ->
-    {ok, State :: aggr_min()}
+-spec init([option()], State :: aggr_max()) ->
+    {ok, State :: aggr_max()}
   | {error, {badarg, Term :: term()}}
 .
 
 %% @private
 %% @doc Parses initializing arguments to set up the internal state of
-%%      the min aggregate node.
-init([], State = #aggr_min{}) ->
+%%      the max aggregate node.
+init([], State = #aggr_max{}) ->
     post_init(State)
 ;
 
-init([{column, Column} | Args], State = #aggr_min{}) ->
-    init(Args, State#aggr_min{column=Column})
+init([{column, Column} | Args], State = #aggr_max{}) ->
+    init(Args, State#aggr_max{column=Column})
 ;
 
-init([Term | _Args], #aggr_min{}) ->
+init([Term | _Args], #aggr_max{}) ->
     {error, {badarg, Term}}
 .
 
@@ -197,29 +197,29 @@ init([Term | _Args], #aggr_min{}) ->
 
 %% @private
 %% @doc Creates the output table.
-post_init(State=#aggr_min{}) ->
-    {ok, Tid} = ydb_ets_utils:create_table(min_synopsis)
+post_init(State=#aggr_max{}) ->
+    {ok, Tid} = ydb_ets_utils:create_table(max_synopsis)
   , Tuple = #ydb_tuple{timestamp=0, data={undefined}}
-  , ydb_ets_utils:add_tuples(Tid, min, Tuple)
-  , {ok, State#aggr_min{tid=Tid}}
+  , ydb_ets_utils:add_tuples(Tid, max, Tuple)
+  , {ok, State#aggr_max{tid=Tid}}
 .
 
 %% ----------------------------------------------------------------- %%
 
--spec get_min(
+-spec get_max(
     Tuples :: [ydb_plan_node:ydb_tuple()]
   , Index :: integer()
-) -> Min :: number().
+) -> Max :: number().
 
 %% @private
-%% @doc Gets the minimum from a list of intermediate mins stored as
+%% @doc Gets the maximum from a list of intermediate maxs stored as
 %%      ydb_tuples.
-get_min(Tuples, Index) when is_list(Tuples) ->
-    MinList = lists:map(fun(Tuple) ->
+get_max(Tuples, Index) when is_list(Tuples) ->
+    MaxList = lists:map(fun(Tuple) ->
         element(Index, Tuple#ydb_tuple.data) end
       , Tuples
     )
-  , lists:min(MinList)
+  , lists:max(MaxList)
 .
 
 %% ----------------------------------------------------------------- %%
@@ -227,25 +227,25 @@ get_min(Tuples, Index) when is_list(Tuples) ->
 -spec apply_diffs(
     Tids :: [ets:tid()]
   , Index :: integer()
-  , CurrMin :: number()
+  , CurrMax :: number()
   , OutTid :: ets:tid()
   , SynTid :: ets:tid()
 ) ->
     NewTuple :: ydb_plan_node:ydb_tuple()
 .
 
-%% @doc Apply the diffs, update the minimum, and output the results to
+%% @doc Apply the diffs, update the maximum, and output the results to
 %%      the listeners.
-apply_diffs(Tids, Index, CurrMin, OutTid, SynTid) ->
+apply_diffs(Tids, Index, CurrMax, OutTid, SynTid) ->
     {Ins, Dels} = ydb_ets_utils:extract_diffs(Tids)
 
     % Apply all the inserts.
-  , InterMin = add(CurrMin, Ins, SynTid, Index)
+  , InterMax = add(CurrMax, Ins, SynTid, Index)
   
     % Apply all the deletes and create a new tuple.
-  , NewMin = sub(InterMin, Dels, SynTid, Index)
+  , NewMax = sub(InterMax, Dels, SynTid, Index)
   , NewTuple = #ydb_tuple{
-        data=list_to_tuple([NewMin])
+        data=list_to_tuple([NewMax])
       , timestamp=max(
             ydb_ets_utils:max_timestamp(Ins)
           , ydb_ets_utils:max_timestamp(Dels)
@@ -253,7 +253,7 @@ apply_diffs(Tids, Index, CurrMin, OutTid, SynTid) ->
     }
     
     % Add tuple to diffs table.
-  , ydb_ets_utils:add_diffs(OutTid, '+', min, NewTuple)
+  , ydb_ets_utils:add_diffs(OutTid, '+', max, NewTuple)
   
     % Send to listeners.
   , ydb_plan_node:notify(
@@ -268,60 +268,60 @@ apply_diffs(Tids, Index, CurrMin, OutTid, SynTid) ->
 %% ----------------------------------------------------------------- %%
 
 -spec add(
-    CurrMin :: undefined | number()
+    CurrMax :: undefined | number()
   , Ins :: [ydb_plan_node:ydb_tuple()]
   , SynTid :: ets:tid()
   , Index :: integer()
 ) ->
-    NewMin :: number().
+    NewMax :: number().
 
-%% @doc Updates the minimum if a new number is added in.
-add(CurrMin, _Ins=[], _SynTid, _Index) ->
-    CurrMin
+%% @doc Updates the maximum if a new number is added in.
+add(CurrMax, _Ins=[], _SynTid, _Index) ->
+    CurrMax
 ;
 
 add(undefined, Ins, SynTid, Index) ->
     Timestamp = ydb_ets_utils:max_timestamp(Ins)
-  , InterMin = get_min(Ins, Index)
+  , InterMax = get_max(Ins, Index)
 
     % Add to synopsis table.
   , InterTuple = #ydb_tuple{
-        data=list_to_tuple([InterMin])
+        data=list_to_tuple([InterMax])
       , timestamp=Timestamp
     }
-  , ydb_ets_utils:add_tuples(SynTid, inter_min, InterTuple)
-  , InterMin
+  , ydb_ets_utils:add_tuples(SynTid, inter_max, InterTuple)
+  , InterMax
 ;
     
-add(CurrMin, Ins, SynTid, Index) ->
-    InterMin = add(undefined, Ins, SynTid, Index)
-  , min(CurrMin, InterMin)
+add(CurrMax, Ins, SynTid, Index) ->
+    InterMax = add(undefined, Ins, SynTid, Index)
+  , max(CurrMax, InterMax)
 .
 
 %% ----------------------------------------------------------------- %%
 
 -spec sub(
-    InterMin :: number()
+    InterMax :: number()
   , Dels :: [ydb_plan_node:ydb_tuple()]
   , SynTid :: ets:tid()
   , Index :: integer()
 ) ->
-    NewMin :: number().
+    NewMax :: number().
 
-%% @doc Updates the minimum if a number is removed.
-sub(InterMin, _Dels=[], _SynTid, _Index) ->
-    InterMin
+%% @doc Updates the maximum if a number is removed.
+sub(InterMax, _Dels=[], _SynTid, _Index) ->
+    InterMax
 ;
 
-sub(_InterMin, Dels, SynTid, Index) ->
-    % Delete min entry that has fallen out.
+sub(_InterMax, Dels, SynTid, Index) ->
+    % Delete max entry that has fallen out.
     Timestamp = ydb_ets_utils:max_timestamp(Dels)
-  , ydb_ets_utils:delete_tuples(SynTid, {inter_min, Timestamp})
+  , ydb_ets_utils:delete_tuples(SynTid, {inter_max, Timestamp})
   
-    % Compute the new min.
-  , InterMins = ydb_ets_utils:dump_tuples(SynTid, inter_min)
-  , NewMin = get_min(InterMins, Index)
-  , NewMin
+    % Compute the new max.
+  , InterMaxs = ydb_ets_utils:dump_tuples(SynTid, inter_max)
+  , NewMax = get_max(InterMaxs, Index)
+  , NewMax
 .
 
 %%% =============================================================== %%%
@@ -331,12 +331,12 @@ sub(_InterMin, Dels, SynTid, Index) ->
 -ifdef(TEST).
 init_test() ->
     ?assertMatch(
-        {ok, #aggr_min{column=[first]}}
-      , init([], #aggr_min{column=[first]})
+        {ok, #aggr_max{column=[first]}}
+      , init([], #aggr_max{column=[first]})
     )
   , ?assertMatch(
         {error, {badarg, bad}}
-      , init([bad], #aggr_min{})
+      , init([bad], #aggr_max{})
     )
 .
 -endif.
