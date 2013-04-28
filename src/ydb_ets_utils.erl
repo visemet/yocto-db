@@ -101,6 +101,7 @@ add_tuples(Tid, Op, Tuple=#ydb_tuple{timestamp=Timestamp}) ->
     ets:insert(Tid, {{Op, Timestamp}, Tuple})
   , ok
 .
+%% ----------------------------------------------------------------- %%
 
 -spec delete_tuples(
     Tid :: ets:tid()
@@ -116,9 +117,6 @@ delete_tuples(Tid, {Op, Timestamp}) ->
 
 %% ----------------------------------------------------------------- %%
 
-<<<<<<< HEAD
--spec delete_table(Tid :: ets:tid()) -> ok.
-=======
 -spec delete_tuples(
     Tid :: ets:tid()
   , Op :: atom()
@@ -127,10 +125,10 @@ delete_tuples(Tid, {Op, Timestamp}) ->
     {ok}
 .
 
-%% @doc Adds tuples to the specified table, using {Op, Timestamp}
+%% @doc Deletes tuples from the specified table, using {Op, Timestamp}
 %%      as the key. This table is assumed to be in synopsis format.
 delete_tuples(Tid, Op, Tuples) when is_list(Tuples) ->
-    lists:foreach(fun(X) -> add_tuples(Tid, Op, X) end, Tuples)
+    lists:foreach(fun(X) -> delete_tuples(Tid, Op, X) end, Tuples)
   , {ok}
 ;
 delete_tuples(Tid, Op, Tuple=#ydb_tuple{timestamp=Timestamp}) ->
@@ -141,8 +139,7 @@ delete_tuples(Tid, Op, Tuple=#ydb_tuple{timestamp=Timestamp}) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec delete_table(Tid :: ets:tid()) -> {ok}.
->>>>>>> Completed relational SUM aggregate.
+-spec delete_table(Tid :: ets:tid()) -> ok.
 
 %% @doc Deletes the specified table.
 delete_table(Tid) ->
@@ -230,7 +227,6 @@ add_diffs(Tid, Diff, Op, Tuples) when is_list(Tuples) ->
   , ok
 .
 
-
 %% ----------------------------------------------------------------- %%
 
 -spec extract_diffs(
@@ -280,7 +276,9 @@ extract_timestamps(Tuples) ->
     Timestamps :: [non_neg_integer()]
 .
 
-%% @doc TODO
+%% ----------------------------------------------------------------- %%
+
+%% @doc Extracts the timestamps from a list of ETS tables.
 extract_timestamps(Tids, syn) ->
     extract_timestamps(Tids, rel)
 ;
@@ -296,6 +294,8 @@ extract_timestamps(Tids, diff) ->
         lists:map(fun(X) -> ets:select(X, Spec) end, Tids)
     )
 .
+
+%% ----------------------------------------------------------------- %%
 
 -spec max_timestamp(
     Tuples :: [ydb_plan_node:ydb_tuple()]
@@ -337,6 +337,7 @@ max_timestamp(Tids, TableType) ->
     ok
 .
 
+%% @doc Replaces a tuple in the given table.
 replace_tuple(Tid, Type, OldTuple=#ydb_tuple{}, NewTuple=#ydb_tuple{}) ->
     ydb_ets_utils:delete_tuples(Tid, Type, OldTuple)
   , ydb_ets_utils:add_tuples(Tid, Type, NewTuple)
