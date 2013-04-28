@@ -7,11 +7,13 @@
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
 
--export([create_table/1, delete_table/1, add_tuples/3, delete_tuples/2]).
+-export([create_table/1, delete_table/1, add_tuples/3, delete_tuples/2,
+         delete_tuples/3, replace_tuple/4]).
 -export([dump_raw/1, dump_tuples/1, dump_tuples/2, extract_diffs/1,
     extract_timestamps/1, extract_timestamps/2, get_copy/2]).
 -export([apply_diffs/2, add_diffs/4, combine_partial_results/2,
     max_timestamp/1, max_timestamp/2]).
+
 
 %%% =============================================================== %%%
 %%%  internal records and types                                     %%%
@@ -114,7 +116,33 @@ delete_tuples(Tid, {Op, Timestamp}) ->
 
 %% ----------------------------------------------------------------- %%
 
+<<<<<<< HEAD
 -spec delete_table(Tid :: ets:tid()) -> ok.
+=======
+-spec delete_tuples(
+    Tid :: ets:tid()
+  , Op :: atom()
+  , TupleOrTuples :: ydb_tuple() | [ydb_tuple()]
+) ->
+    {ok}
+.
+
+%% @doc Adds tuples to the specified table, using {Op, Timestamp}
+%%      as the key. This table is assumed to be in synopsis format.
+delete_tuples(Tid, Op, Tuples) when is_list(Tuples) ->
+    lists:foreach(fun(X) -> add_tuples(Tid, Op, X) end, Tuples)
+  , {ok}
+;
+delete_tuples(Tid, Op, Tuple=#ydb_tuple{timestamp=Timestamp}) ->
+    ets:delete_object(Tid, {{Op, Timestamp}, Tuple})
+  , {ok}
+.
+
+
+%% ----------------------------------------------------------------- %%
+
+-spec delete_table(Tid :: ets:tid()) -> {ok}.
+>>>>>>> Completed relational SUM aggregate.
 
 %% @doc Deletes the specified table.
 delete_table(Tid) ->
@@ -296,6 +324,23 @@ max_timestamp(Tids, TableType) ->
       , -1
       , extract_timestamps(Tids, TableType)
     )
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec replace_tuple(
+    Tid :: ets:tid()
+  , Type :: atom()
+  , OldTuple :: ydb_tuple()
+  , NewTuple :: ydb_tuple()
+) ->
+    ok
+.
+
+replace_tuple(Tid, Type, OldTuple=#ydb_tuple{}, NewTuple=#ydb_tuple{}) ->
+    ydb_ets_utils:delete_tuples(Tid, Type, OldTuple)
+  , ydb_ets_utils:add_tuples(Tid, Type, NewTuple)
+  , ok
 .
 
 %%% =============================================================== %%%
