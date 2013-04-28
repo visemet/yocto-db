@@ -1,10 +1,22 @@
 -module(ydb_planner).
 
--export([make_no_branch/1]).
+-export([make_nonjoin/1, make_no_branch/1]).
 
 %%% =============================================================== %%%
 %%%  API                                                            %%%
 %%% =============================================================== %%%
+
+%-spec
+
+%% @doc TODO
+make_nonjoin({input_stream, Query, Name, Type})
+  when
+    is_tuple(Query)
+  , is_atom(Name)
+  , is_atom(Type)
+  ->
+    make_nonjoin(Query, {Name, Type}, dict:new(), [])
+.
 
 %-spec
 
@@ -20,6 +32,63 @@ make_no_branch({input_stream, Query, Name})
 %%% =============================================================== %%%
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
+
+%-spec
+
+%% @doc TODO
+make_nonjoin({}, _PrevId, _History, Result) ->
+    {ok, lists:reverse(Result)}
+;
+
+make_nonjoin(
+    {Type = file_output, Next, Filename}
+  , PrevId
+  , History
+  , Result
+) when
+    is_tuple(Next)
+  , is_tuple(PrevId)
+  , is_list(Result)
+  ->
+    CurrId = case dict:find(Type, History) of
+        {ok, Value} -> {Type, Value}
+
+      ; error -> {Type, 0}
+    end
+
+  , Listen = case PrevId of
+        % Listens to an input stream
+        {InputStream, BranchType}
+          when
+            is_atom(InputStream)
+          , is_atom(BranchType)
+          ->
+            {ydb_sup_utils:get_branch_pid(InputStream), BranchType}
+
+        % Listens to another node in the query
+      ; {PrevType, PrevValue}
+          when
+            is_atom(PrevType)
+          , is_integer(PrevValue)
+          ->
+            ydb_sup_utils:pid_fun(PrevId)
+    end
+
+  , ChildSpec = prepare_child_spec(CurrId, {ydb_file_output, start_link, [
+        [{filename, Filename}]
+      , [{listen, [Listen]}]
+    ]})
+
+  , NewHistory = dict:update_counter(Type, 1, History)
+
+  , make_nonjoin(Next, CurrId, NewHistory, [ChildSpec|Result])
+;
+
+make_nonjoin(Query, _PrevId, _History, _Result) ->
+    {error, {badarg, Query}}
+.
+
+%% ----------------------------------------------------------------- %%
 
 %-spec
 
