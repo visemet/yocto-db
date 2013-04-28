@@ -24,7 +24,7 @@ start_link(QuerySpec) ->
 
 %% @doc TODO
 init({QuerySpec}) ->
-    case ydb_planner:make_no_branch(QuerySpec) of
+    case ydb_planner:make_nonjoin(QuerySpec) of
         {ok, ChildSpec} -> {ok, {{one_for_one, 1, 60}, ChildSpec}}
 
       ; {error, _Reason} -> ignore

@@ -1,6 +1,6 @@
 -module(ydb_sup_utils).
 
--export([pid_fun/1, get_pid/2]).
+-export([pid_fun/1, get_pid/2, get_branch_pid/1]).
 
 %%% =============================================================== %%%
 %%%  API                                                            %%%
@@ -22,7 +22,7 @@ pid_fun(ChildId) when not is_pid(ChildId) ->
 .
 
 -spec get_pid(
-    SupRef :: pid() % supervisor:sup_ref()
+    SupRef :: pid() | atom() % supervisor:sup_ref()
   , ChildId :: term() % supervisor:child_id()
 ) ->
     ChildPid :: pid()
@@ -31,7 +31,7 @@ pid_fun(ChildId) when not is_pid(ChildId) ->
 %% @doc TODO
 get_pid(SupRef, ChildId)
   when
-    is_pid(SupRef)
+    is_pid(SupRef) orelse is_atom(SupRef)
   , not is_pid(ChildId)
   ->
     erlang:element(
@@ -41,6 +41,20 @@ get_pid(SupRef, ChildId)
           , 1 % {**Id, Child, Type, Modules}
           , supervisor:which_children(SupRef)
         )
+    )
+.
+
+%-spec
+
+%% @doc TODO
+get_branch_pid(InputStream) when is_atom(InputStream) ->
+    get_pid(                                   % ydb_input_stream
+        get_pid(                               % ydb_input_stream_sup
+            get_pid(ydb, ydb_input_stream_sup) % ydb_sup
+          , InputStream
+        )
+
+      , ydb_branch_node
     )
 .
 
