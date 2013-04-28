@@ -1,7 +1,7 @@
 %% @author Kalpana Suraesh <ksuraesh@caltech.edu>
 
-%% @doc Module for the SUM aggregate function. Tracks the sum of the
-%%      values seen so far.
+%% @doc Module for the relation-to-relation SUM aggregate function.
+%% Tracks the sum of the values seen so far.
 -module(ydb_sum_rel).
 -behaviour(ydb_plan_node).
 
@@ -24,21 +24,17 @@
     column :: atom() | {atom(), atom()}
   , index :: integer()
   , tid :: ets:tid()
-  , init_tid :: ets:tid()
-  , curr_sum=0 :: integer()
 }).
 
 -type aggr_sum() :: #aggr_sum{
     column :: undefined | atom() | {atom(), atom()}
   , index :: undefined | integer()
   , tid :: undefined | ets:tid()
-  , init_tid :: undefined | ets:tid()
-  , curr_sum :: integer()}.
+}.
 %% Internal sum aggregate state.
 
 -type option() ::
     {column, Column :: atom() | {ColName :: atom(), NewName :: atom()}}
-  | {init_tid, Tid :: ets:tid()}
 .
 %% Options for the SUM aggregate:
 %% <ul>
@@ -47,8 +43,6 @@
 %%       <code>Column</code> which is the name of the column, or the
 %%       tuple <code>{ColName, NewName}</code> which is the current
 %%       name of the column and the desired new name.</li>
-%%    <li><code>{init_tid, Tid}</code> - The Tid of the table to read
-%%       from initially.</li>
 %% </ul>
 
 %%% =============================================================== %%%
@@ -103,36 +97,17 @@ init(_Args) -> {error, {badarg, not_options_list}}.
 %% @doc Writes the new sum to its output table.
 delegate(
     _Request = {diffs, Tids}
-  , State = #aggr_sum{curr_sum=CurrSum, index=Index, tid=Tid}
-) ->
-    NewSum = apply_diffs(Tids, Index, CurrSum, Tid)
-  , NewState = State#aggr_sum{curr_sum=NewSum}
-  , {ok, NewState}
-;
+  , State = #aggr_sum{index=Index, tid=SynTid}
+) when is_list(Tids) ->
+    {ok, OutTid} = ydb_ets_utils:create_table(sum)
 
-%% @doc Reads values from a table and adds them to the sum.
-delegate(
-    _Request = {read_table, Tid}
-  , State = #aggr_sum{curr_sum=CurrSum, index=Index, tid=OutTid}
-) ->
-    Tuples = ydb_ets_utils:dump_tuples(Tid)
-  , NewSum = lists:foldl(
-        fun(Tuple, Sum) ->
-            check_tuple(Tuple, Index, Sum, OutTid)
-        end
-      , CurrSum
-      , Tuples
-    )
-  , NewState = State#aggr_sum{curr_sum=NewSum}
-  , {ok, NewState}
-;
+  , [CurrTuple] = ydb_ets_utils:dump_tuples(SynTid)
+  , {CurrSum} = CurrTuple#ydb_tuple.data
 
-%% @doc Sends output Tid to requesting Pid.
-delegate(
-    _Request = {get_output, ReqPid}
-  , State = #aggr_sum{tid=Tid}
-) ->
-    ReqPid ! Tid
+  , ydb_ets_utils:add_diffs(OutTid, '-', sum, CurrTuple)
+  , NewTuple = apply_diffs(Tids, Index, CurrSum, OutTid)
+
+  , ydb_ets_utils:replace_tuple(SynTid, sum, CurrTuple, NewTuple)
   , {ok, State}
 ;
 
@@ -210,10 +185,6 @@ init([{column, Column} | Args], State = #aggr_sum{}) ->
     init(Args, State#aggr_sum{column=Column})
 ;
 
-init([{tid, Tid} | Args], State = #aggr_sum{}) ->
-    init(Args, State#aggr_sum{init_tid=Tid})
-;
-
 init([Term | _Args], #aggr_sum{}) ->
     {error, {badarg, Term}}
 .
@@ -223,51 +194,11 @@ init([Term | _Args], #aggr_sum{}) ->
 %% @private
 %% @doc Creates the output table.
 post_init(State=#aggr_sum{}) ->
-    {ok, Tid} = ydb_ets_utils:create_table(sum)
+    %gen_server:cast(erlang:self(), {compute_schema})
+    {ok, Tid} = ydb_ets_utils:create_table(sum_synopsis)
+  , Tuple = #ydb_tuple{timestamp=0, data={0}}
+  , ydb_ets_utils:add_tuples(Tid, sum, Tuple)
   , {ok, State#aggr_sum{tid=Tid}}
-.
-
-%% ----------------------------------------------------------------- %%
-
--spec check_tuple(
-    Tuple :: ydb_plan_node:ydb_tuple()
-  , Index :: integer()
-  , CurrMin :: number()
-  , OutTid :: ets:tid()
-) ->
-    NewMin :: integer()
-.
-
-%% @private
-%% @doc Selects only the necessary column required for finding the sum
-%%      and adds it to the current sum.
-check_tuple(
-    Tuple=#ydb_tuple{data=Data}
-  , Index
-  , CurrSum
-  , OutTid
-) ->
-    RelevantData = element(Index, Data)
-  , NewSum = get_sum(CurrSum, RelevantData)
-  , NewTuple = Tuple#ydb_tuple{data=list_to_tuple([NewSum])}
-  , ydb_ets_utils:add_tuples(OutTid, sum, NewTuple)
-  , NewSum
-.
-
-%% ----------------------------------------------------------------- %%
-
--spec get_sum(Sum :: number(), NewNum :: number()) ->
-    NewMin :: number()
-.
-
-%% @doc Gets the sum of two numbers.
-get_sum(undefined, NewNum) ->
-    NewNum
-;
-
-get_sum(Sum, NewNum) when is_number(NewNum) ->
-    NewSum = Sum + NewNum
-  , NewSum
 .
 
 %% ----------------------------------------------------------------- %%
@@ -278,7 +209,7 @@ get_sum(Sum, NewNum) when is_number(NewNum) ->
   , CurrSum :: number()
   , OutTid :: ets:tid()
 ) ->
-    NewSum :: number()
+    NewTuple :: ydb_tuple()
 .
 
 %% @doc TODO
@@ -297,13 +228,23 @@ apply_diffs(Tids, Index, CurrSum, OutTid) ->
       , Dels
     )
 
+    % create a new tuple from this sum
   , NewTuple = #ydb_tuple{
         data=list_to_tuple([NewSum])
       , timestamp=ydb_ets_utils:max_timestamp(Tids, diff)
     }
 
-  , ydb_ets_utils:add_tuples(OutTid, sum, NewTuple)
-  , NewSum
+    % add tuple to diffs table
+  , ydb_ets_utils:add_diffs(OutTid, '+', sum, NewTuple)
+
+    % send to listeners
+  , ydb_plan_node:notify(
+        erlang:self()
+      , {diffs, OutTid}
+    )
+
+    % return value to update state
+  , NewTuple
 .
 
 %% ----------------------------------------------------------------- %%
@@ -320,10 +261,12 @@ add(Sum, NewNum) when is_number(NewNum) ->
     Sum + NewNum
 .
 
+%% ----------------------------------------------------------------- %%
+
 -spec sub(Sum :: number(), NewNum :: number()) ->
     NewMin :: number().
 
-%% @doc Gets the sum of two numbers.
+%% @doc Gets the difference of two numbers.
 sub(undefined, NewNum) ->
     NewNum
 ;
