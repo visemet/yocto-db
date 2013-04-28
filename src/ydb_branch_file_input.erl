@@ -77,8 +77,8 @@ start_link(Name, Args, Options) ->
 
 %% @doc Tells a particular file input process to start reading from
 %%      the file.
-do_read(Pid) when is_pid(Pid) ->
-    ydb_plan_node:relegate(Pid, {read})
+do_read(PlanNode) when is_pid(PlanNode) orelse is_atom(PlanNode) ->
+    ydb_plan_node:relegate(PlanNode, {read})
 .
 
 %% ----------------------------------------------------------------- %%

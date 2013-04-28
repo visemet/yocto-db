@@ -147,7 +147,10 @@ remove_listener(PlanNode, Subscriber)
 -spec relegate(pid(), term()) -> ok.
 
 %% @doc Processes the message with the specific type of plan node.
-relegate(PlanNode, Message) when is_pid(PlanNode) ->
+relegate(PlanNode, Message)
+  when
+    is_pid(PlanNode) orelse is_atom(PlanNode)
+  ->
     gen_server:cast(PlanNode, {relegate, Message})
 .
 
@@ -157,7 +160,7 @@ relegate(PlanNode, Message) when is_pid(PlanNode) ->
 %%      including the additional state information.
 relegate(PlanNode, Message, Extras)
   when
-    is_pid(PlanNode)
+    is_pid(PlanNode) orelse is_atom(PlanNode)
   , is_list(Extras)
   ->
     gen_server:cast(PlanNode, {relegate, Message, Extras})
