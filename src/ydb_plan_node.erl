@@ -347,6 +347,23 @@ handle_cast(
 
                   ; {error, already_subscribed} -> []
                 end
+
+              ; ({BranchNode, BranchType})
+              when
+                is_pid(BranchNode)
+              , is_atom(BranchType)
+              ->
+                Result = ydb_branch_node:add_listener(
+                    BranchNode
+                  , BranchType
+                  , erlang:self()
+                )
+
+              , case Result of
+                    {ok, Schema} -> Schema
+
+                  ; {error, already_subscribed} -> []
+                end
             end
 
           , PlanNodes
