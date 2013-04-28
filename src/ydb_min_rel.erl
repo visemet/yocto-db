@@ -8,8 +8,6 @@
 -export([start_link/2, start_link/3]).
 -export([init/1, delegate/2, delegate/3, compute_schema/2]).
 
--export([add/2]).
-
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
 
@@ -106,9 +104,11 @@ delegate(
   , [CurrTuple] = ydb_ets_utils:dump_tuples(SynTid, min)
   , {CurrMin} = CurrTuple#ydb_tuple.data
   
+    % Update the tuple the output.
   , ydb_ets_utils:add_diffs(OutTid, '-', min, CurrTuple)
   , NewTuple = apply_diffs(Tids, Index, CurrMin, OutTid, SynTid)
   
+    % Update the tuple in the synopsis table.
   , ydb_ets_utils:replace_tuple(SynTid, min, CurrTuple, NewTuple)
   , {ok, State}
 ;
@@ -196,7 +196,7 @@ init([Term | _Args], #aggr_min{}) ->
 %% ----------------------------------------------------------------- %%
 
 %% @private
-%% @doc Creates the output tables.
+%% @doc Creates the output table.
 post_init(State=#aggr_min{}) ->
     {ok, Tid} = ydb_ets_utils:create_table(min_synopsis)
   , Tuple = #ydb_tuple{timestamp=0, data={null}}
@@ -206,14 +206,17 @@ post_init(State=#aggr_min{}) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec get_mins(Tuples :: [ydb_plan_node:ydb_tuple()]) -> Min :: number().
+-spec get_min(
+    Tuples :: [ydb_plan_node:ydb_tuple()]
+  , Index :: integer()
+) -> Min :: number().
 
 %% @private
 %% @doc Gets the minimum from a list of intermediate mins stored as
 %%      ydb_tuples.
-get_mins(Tuples) when is_list(Tuples) ->
+get_min(Tuples, Index) when is_list(Tuples) ->
     MinList = lists:map(fun(Tuple) ->
-        element(1, Tuple#ydb_tuple.data) end
+        element(Index, Tuple#ydb_tuple.data) end
       , Tuples
     )
   , lists:min(MinList)
@@ -237,24 +240,16 @@ apply_diffs(Tids, Index, CurrMin, OutTid, SynTid) ->
     {Ins, Dels} = ydb_ets_utils:extract_diffs(Tids)
 
     % Apply all the inserts.
-  , InterMin = lists:foldl(
-        fun(X, Curr) -> add(Curr, element(Index, X#ydb_tuple.data)) end
-      , CurrMin
-      , Ins
-    )
-    % Store intermediate min into ets table.
-  , Timestamp = ydb_ets_utils:max_timestamp(Tids, diff)
-  , InterTuple = #ydb_tuple{
-        data=list_to_tuple([InterMin])
-      , timestamp=Timestamp
-    }
-  , ydb_ets_utils:add_tuples(SynTid, inter_min, InterTuple)
+  , InterMin = add(CurrMin, Ins, SynTid, Index)
   
-    % Apply all the deletes.
-  , NewMin = sub(Dels, SynTid)
+    % Apply all the deletes and create a new tuple.
+  , NewMin = sub(InterMin, Dels, SynTid, Index)
   , NewTuple = #ydb_tuple{
         data=list_to_tuple([NewMin])
-      , timestamp=Timestamp
+      , timestamp=max(
+            ydb_ets_utils:max_timestamp(Ins)
+          , ydb_ets_utils:max_timestamp(Dels)
+        )
     }
     
     % Add tuple to diffs table.
@@ -272,35 +267,60 @@ apply_diffs(Tids, Index, CurrMin, OutTid, SynTid) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec add(Min :: number(), NewNum :: number()) ->
+-spec add(
+    CurrMin :: undefined | number()
+  , Ins :: [ydb_plan_node:ydb_tuple()]
+  , SynTid :: ets:tid()
+  , Index :: integer()
+) ->
     NewMin :: number().
 
 %% @doc Updates the minimum if a new number is added in.
-add(undefined, NewNum) ->
-    NewNum
+add(CurrMin, _Ins=[], _SynTid, _Index) ->
+    CurrMin
 ;
 
-add(Min, NewNum) when is_number(NewNum) ->
-    min(Min, NewNum)
+add(undefined, Ins, SynTid, Index) ->
+    Timestamp = ydb_ets_utils:max_timestamp(Ins)
+  , InterMin = get_min(Ins, Index)
+
+    % Add to synopsis table.
+  , InterTuple = #ydb_tuple{
+        data=list_to_tuple([InterMin])
+      , timestamp=Timestamp
+    }
+  , ydb_ets_utils:add_tuples(SynTid, inter_min, InterTuple)
+  , InterMin
+;
+    
+add(CurrMin, Ins, SynTid, Index) ->
+    InterMin = add(undefined, Ins, SynTid, Index)
+  , min(CurrMin, InterMin)
 .
 
 %% ----------------------------------------------------------------- %%
 
 -spec sub(
-    Dels :: [ydb_plan_node:ydb_tuple()]
+    InterMin :: number()
+  , Dels :: [ydb_plan_node:ydb_tuple()]
   , SynTid :: ets:tid()
+  , Index :: integer()
 ) ->
     NewMin :: number().
 
 %% @doc Updates the minimum if a number is removed.
-sub(Dels, SynTid) ->
+sub(InterMin, _Dels=[], _SynTid, _Index) ->
+    InterMin
+;
+
+sub(_InterMin, Dels, SynTid, Index) ->
     % Delete min entry that has fallen out.
     Timestamp = ydb_ets_utils:max_timestamp(Dels)
   , ydb_ets_utils:delete_tuples(SynTid, {inter_min, Timestamp})
   
     % Compute the new min.
   , InterMins = ydb_ets_utils:dump_tuples(SynTid, inter_min)
-  , NewMin = get_mins(InterMins)
+  , NewMin = get_min(InterMins, Index)
   , NewMin
 .
 

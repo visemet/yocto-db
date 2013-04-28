@@ -104,9 +104,11 @@ delegate(
   , [CurrTuple] = ydb_ets_utils:dump_tuples(SynTid)
   , {CurrSum} = CurrTuple#ydb_tuple.data
 
+    % Update the tuple in the output.
   , ydb_ets_utils:add_diffs(OutTid, '-', sum, CurrTuple)
   , NewTuple = apply_diffs(Tids, Index, CurrSum, OutTid)
 
+    % Update the tuple in the synopsis table.
   , ydb_ets_utils:replace_tuple(SynTid, sum, CurrTuple, NewTuple)
   , {ok, State}
 ;
