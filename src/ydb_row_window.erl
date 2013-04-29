@@ -253,7 +253,7 @@ set_first(NewFirst, Diffs, MaxSize) ->
 
 %% @doc Returns the last diff.
 get_last(Diffs) ->
-    erlang:tl(Diffs)
+    lists:last(Diffs)
 .
 
 -spec set_last(ets:tid(), [ets:tid()], pos_integer()) -> [ets:tid()].
