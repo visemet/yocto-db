@@ -152,7 +152,16 @@ init([], State = #row_window{}) ->
 ;
 
 init([{size, {Size, rows}} | Args], State = #row_window{}) ->
-    init(Args, State#row_window{size=Size})
+    Diffs = lists:map(
+        fun (_SeqNum) ->
+            {ok, Tid} = ydb_ets_utils:create_diff_table(?MODULE)
+          , Tid
+        end
+
+      , lists:seq(0, Size) % `Size + 1' diffs
+    )
+
+  , init(Args, State#row_window{size=Size, diffs=Diffs})
 ;
 
 init([{pulse, {Pulse, rows}} | Args], State = #row_window{}) ->
