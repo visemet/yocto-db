@@ -164,3 +164,48 @@ init([Term | _Args], #row_window{}) ->
 .
 
 %% ----------------------------------------------------------------- %%
+
+-spec get_first([ets:tid()]) -> ets:tid().
+
+%% @doc Returns the first diff.
+get_first(Diffs) ->
+    erlang:hd(Diffs)
+.
+
+-spec set_first(ets:tid(), [ets:tid()], pos_integer()) -> [ets:tid()].
+
+%% @doc Replaces the first diff with specified diff, or prepends if the
+%%      length of the list is less than the maximum size.
+set_first(NewFirst, Diffs, MaxSize) ->
+    Size = erlang:length(Diffs)
+
+  , if
+        Size < MaxSize -> [NewFirst|Diffs]
+
+      ; Size =:= MaxSize -> [NewFirst|erlang:tl(Diffs)]
+    end
+.
+
+-spec get_last([ets:tid()]) -> ets:tid().
+
+%% @doc Returns the last diff.
+get_last(Diffs) ->
+    erlang:tl(Diffs)
+.
+
+-spec set_last(ets:tid(), [ets:tid()], pos_integer()) -> [ets:tid()].
+
+%% @doc Replaces the last diff with specified diff, or appends if the
+%%      length of the list is less than the maximum size.
+set_last(NewLast, Diffs, MaxSize) ->
+    Size = erlang:length(Diffs)
+
+  , if
+        Size < MaxSize -> lists:append(Diffs, [NewLast])
+
+      ; Size =:= MaxSize ->
+        lists:append(lists:sublist(Diffs, Size - 1), [NewLast])
+    end
+.
+
+%% ----------------------------------------------------------------- %%
