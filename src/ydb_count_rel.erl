@@ -99,7 +99,7 @@ delegate(
     _Request = {diffs, Tids}
   , State = #aggr_count{tid=SynTid}
 ) when is_list(Tids) ->
-    {ok, OutTid} = ydb_ets_utils:create_table(count)
+    {ok, OutTid} = ydb_ets_utils:create_diff_table(count)
 
   , [CurrTuple] = ydb_ets_utils:dump_tuples(SynTid)
   , {CurrCount} = CurrTuple#ydb_tuple.data

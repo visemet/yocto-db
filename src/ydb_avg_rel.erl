@@ -99,7 +99,7 @@ delegate(
     _Request = {diffs, Tids}
   , State = #aggr_avg{index=Index, tid=SynTid}
 ) when is_list(Tids) ->
-    {ok, OutTid} = ydb_ets_utils:create_table(avg)
+    {ok, OutTid} = ydb_ets_utils:create_diff_table(avg)
 
   , [CurrTuple] = ydb_ets_utils:dump_tuples(SynTid)
   , {CurrCount, CurrSum} = CurrTuple#ydb_tuple.data

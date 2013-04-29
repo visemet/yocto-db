@@ -99,15 +99,15 @@ delegate(
     _Request = {diffs, Tids}
   , State = #aggr_min{index=Index, tid=SynTid}
 ) when is_list(Tids) ->
-    {ok, OutTid} = ydb_ets_utils:create_table(min)
-    
+    {ok, OutTid} = ydb_ets_utils:create_diff_table(min)
+
   , [CurrTuple] = ydb_ets_utils:dump_tuples(SynTid, min)
   , {CurrMin} = CurrTuple#ydb_tuple.data
-  
+
     % Update the tuple the output.
   , ydb_ets_utils:add_diffs(OutTid, '-', min, CurrTuple)
   , NewTuple = apply_diffs(Tids, Index, CurrMin, OutTid, SynTid)
-  
+
     % Update the tuple in the synopsis table.
   , ydb_ets_utils:replace_tuple(SynTid, min, CurrTuple, NewTuple)
   , {ok, State}
@@ -241,7 +241,7 @@ apply_diffs(Tids, Index, CurrMin, OutTid, SynTid) ->
 
     % Apply all the inserts.
   , InterMin = add(CurrMin, Ins, SynTid, Index)
-  
+
     % Apply all the deletes and create a new tuple.
   , NewMin = sub(InterMin, Dels, SynTid, Index)
   , NewTuple = #ydb_tuple{
@@ -251,16 +251,16 @@ apply_diffs(Tids, Index, CurrMin, OutTid, SynTid) ->
           , ydb_ets_utils:max_timestamp(Dels)
         )
     }
-    
+
     % Add tuple to diffs table.
   , ydb_ets_utils:add_diffs(OutTid, '+', min, NewTuple)
-  
+
     % Send to listeners.
   , ydb_plan_node:notify(
         erlang:self()
       , {diffs, OutTid}
     )
-    
+
     % Return value to update state.
   , NewTuple
 .
@@ -292,7 +292,7 @@ add(undefined, Ins, SynTid, Index) ->
   , ydb_ets_utils:add_tuples(SynTid, inter_min, InterTuple)
   , InterMin
 ;
-    
+
 add(CurrMin, Ins, SynTid, Index) ->
     InterMin = add(undefined, Ins, SynTid, Index)
   , min(CurrMin, InterMin)
@@ -317,7 +317,7 @@ sub(_InterMin, Dels, SynTid, Index) ->
     % Delete min entry that has fallen out.
     Timestamp = ydb_ets_utils:max_timestamp(Dels)
   , ydb_ets_utils:delete_tuples(SynTid, {inter_min, Timestamp})
-  
+
     % Compute the new min.
   , InterMins = ydb_ets_utils:dump_tuples(SynTid, inter_min)
   , NewMin = get_min(InterMins, Index)

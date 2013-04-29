@@ -7,8 +7,8 @@
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
 
--export([create_table/1, delete_table/1, add_tuples/3, delete_tuples/2,
-    delete_tuples/3, replace_tuple/4]).
+-export([create_table/1, create_diff_table/1, delete_table/1, add_tuples/3,
+    delete_tuples/2, delete_tuples/3, replace_tuple/4]).
 -export([dump_raw/1, dump_tuples/1, dump_tuples/2, extract_diffs/1,
     extract_timestamps/1, extract_timestamps/2, get_copy/2]).
 -export([apply_diffs/2, add_diffs/4, combine_partial_results/2,
@@ -77,7 +77,22 @@ dump_tuples(Tid, Op) ->
 
 %% @doc Creates a new ets table with the given name.
 create_table(Name) ->
-    Tid = ets:new(Name, [bag]) % TODO add options
+    Tid = ets:new(Name, [bag])
+  , {ok, Tid}
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec create_diff_table(
+    Name :: atom()
+) ->
+    {ok, Tid:: ets:tid()}
+.
+
+%% @doc Creates a new ets table with the given name. Sets the key of
+%%      the table to the second column.
+create_diff_table(Name) ->
+    Tid = ets:new(Name, [bag, {keypos, 2}])
   , {ok, Tid}
 .
 
@@ -179,16 +194,16 @@ combine_partial_results(Tids, NewName) ->
 %% @doc Applies the diffs in the specified table to the base table.
 apply_diffs(BaseTid, DiffTids) when is_list(DiffTids) ->
     % The MatchSpecs below are produced with the following commands:
-    %   InsSpec = ets:fun2ms(fun ({{'+', Op, Timestamp}, Tuple}) ->
-    %                   {{Op, Timestamp}, Tuple} end).
-    %   DelSpec = ets:fun2ms(fun ({{'-', Op, Timestamp}, Tuple}) ->
-    %                   {{Op, Timestamp}, Tuple} end).
+    %   InsSpec = ets:fun2ms(fun ({'+', Key, Tuple}) ->
+    %                   {Key, Tuple} end).
+    %   DelSpec = ets:fun2ms(fun ({'-', Key, Tuple}) ->
+    %                   {Key, Tuple} end).
 
-    InsSpec = [{{{'+','$1','$2'},'$3'},[],[{{{{'$1','$2'}},'$3'}}]}]
+    InsSpec = [{{'+','$1','$2'},[],[{{'$1','$2'}}]}]
   , Inserts = lists:flatten(
         lists:map(fun(X) -> ets:select(X, InsSpec) end, DiffTids))
   , ets:insert(BaseTid, Inserts)
-  , DelSpec = [{{{'-','$1','$2'},'$3'},[],[{{{{'$1','$2'}},'$3'}}]}]
+  , DelSpec = [{{'-','$1','$2'},[],[{{'$1','$2'}}]}]
   , Deletes = lists:flatten(
         lists:map(fun(X) -> ets:select(X, DelSpec) end, DiffTids))
   , lists:foreach(fun(X) -> ets:delete_object(BaseTid, X) end, Deletes)
@@ -218,7 +233,7 @@ add_diffs(
   , Op
   , Tuple=#ydb_tuple{timestamp=Timestamp}
 ) when is_tuple(Tuple) ->
-    ets:insert(Tid, {{Diff, Op, Timestamp}, Tuple})
+    ets:insert(Tid, {Diff, {Op, Timestamp}, Tuple})
   , ok
 ;
 
@@ -239,14 +254,14 @@ add_diffs(Tid, Diff, Op, Tuples) when is_list(Tuples) ->
 %%      tuples to be added, and to be deleted.
 extract_diffs(DiffTids) ->
     % The MatchSpecs below are produced with the following commands:
-    %   InsSpec = ets:fun2ms(fun ({{'+', _, _}, Tuple}) -> Tuple end).
-    %   DelSpec = ets:fun2ms(fun ({{'-', _, _}, Tuple}) -> Tuple end).
+    %   InsSpec = ets:fun2ms(fun ({'+', _, Tuple}) -> Tuple end).
+    %   DelSpec = ets:fun2ms(fun ({'-', _, Tuple}) -> Tuple end).
 
-    InsSpec = [{{{'+','_','_'},'$1'}, [], ['$1']}]
+    InsSpec = [{{'+','_','$1'},[],['$1']}]
   , Inserts = lists:flatten(
         lists:map(fun(X) -> ets:select(X, InsSpec) end, DiffTids))
 
-  , DelSpec = [{{{'-','_','_'},'$1'}, [], ['$1']}]
+  , DelSpec = [{{'-','_','$1'},[],['$1']}]
   , Deletes = lists:flatten(
         lists:map(fun(X) -> ets:select(X, DelSpec) end, DiffTids))
   , {Inserts, Deletes}
@@ -289,7 +304,7 @@ extract_timestamps(Tids, rel) ->
     )
 ;
 extract_timestamps(Tids, diff) ->
-    Spec = [{{{'_','_','$1'},'_'},[],['$1']}]
+    Spec = [{{'_', {'_','$1'},'_'},[],['$1']}]
   , lists:flatten(
         lists:map(fun(X) -> ets:select(X, Spec) end, Tids)
     )

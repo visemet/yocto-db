@@ -99,15 +99,15 @@ delegate(
     _Request = {diffs, Tids}
   , State = #aggr_max{index=Index, tid=SynTid}
 ) when is_list(Tids) ->
-    {ok, OutTid} = ydb_ets_utils:create_table(max)
-    
+    {ok, OutTid} = ydb_ets_utils:create_diff_table(max)
+
   , [CurrTuple] = ydb_ets_utils:dump_tuples(SynTid, max)
   , {CurrMax} = CurrTuple#ydb_tuple.data
-  
+
     % Update the tuple the output.
   , ydb_ets_utils:add_diffs(OutTid, '-', max, CurrTuple)
   , NewTuple = apply_diffs(Tids, Index, CurrMax, OutTid, SynTid)
-  
+
     % Update the tuple in the synopsis table.
   , ydb_ets_utils:replace_tuple(SynTid, max, CurrTuple, NewTuple)
   , {ok, State}
@@ -241,7 +241,7 @@ apply_diffs(Tids, Index, CurrMax, OutTid, SynTid) ->
 
     % Apply all the inserts.
   , InterMax = add(CurrMax, Ins, SynTid, Index)
-  
+
     % Apply all the deletes and create a new tuple.
   , NewMax = sub(InterMax, Dels, SynTid, Index)
   , NewTuple = #ydb_tuple{
@@ -251,16 +251,16 @@ apply_diffs(Tids, Index, CurrMax, OutTid, SynTid) ->
           , ydb_ets_utils:max_timestamp(Dels)
         )
     }
-    
+
     % Add tuple to diffs table.
   , ydb_ets_utils:add_diffs(OutTid, '+', max, NewTuple)
-  
+
     % Send to listeners.
   , ydb_plan_node:notify(
         erlang:self()
       , {diffs, OutTid}
     )
-    
+
     % Return value to update state.
   , NewTuple
 .
@@ -292,7 +292,7 @@ add(undefined, Ins, SynTid, Index) ->
   , ydb_ets_utils:add_tuples(SynTid, inter_max, InterTuple)
   , InterMax
 ;
-    
+
 add(CurrMax, Ins, SynTid, Index) ->
     InterMax = add(undefined, Ins, SynTid, Index)
   , max(CurrMax, InterMax)
@@ -317,7 +317,7 @@ sub(_InterMax, Dels, SynTid, Index) ->
     % Delete max entry that has fallen out.
     Timestamp = ydb_ets_utils:max_timestamp(Dels)
   , ydb_ets_utils:delete_tuples(SynTid, {inter_max, Timestamp})
-  
+
     % Compute the new max.
   , InterMaxs = ydb_ets_utils:dump_tuples(SynTid, inter_max)
   , NewMax = get_max(InterMaxs, Index)
