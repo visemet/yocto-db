@@ -52,6 +52,101 @@ add_tuples_test() ->
   , ?assertEqual(lists:sort([S1, S2, S3, S4, S5, S6]), raw_output(Tid))
 .
 
+delete_tuples_test() ->
+    {ok, Tid} = ydb_ets_utils:create_table(test)
+  , {ok, Tid2} = ydb_ets_utils:create_table(test)
+  , {T1, T2, T3, T4, _T5, _T6} = get_tuples(tuple)
+  , {S1, S2, S3, S4, _S5, _S6} = get_syn_tuples(tuple)
+
+    % test delete_tuples/3
+  , ydb_ets_utils:add_tuples(Tid, test, [T1, T2, T3, T4])
+  , ?assertEqual([S1, S2, S3, S4], raw_output(Tid))
+
+  , ydb_ets_utils:delete_tuples(Tid, test, T1)
+  , ?assertEqual([S2, S3, S4], raw_output(Tid))
+
+  , ydb_ets_utils:delete_tuples(Tid, test, [T2, T3])
+  , ?assertEqual([S4], raw_output(Tid))
+
+  , ydb_ets_utils:delete_tuples(Tid, test, T1)
+  , ?assertEqual([S4], raw_output(Tid))
+
+    % test delete_tuples/2
+  , ydb_ets_utils:add_tuples(Tid2, test, [T1, T2, T3, T4])
+  , ?assertEqual([S1, S2, S3, S4], raw_output(Tid2))
+
+  , ydb_ets_utils:delete_tuples(Tid2, {test, 1})
+  , ?assertEqual([S2, S3, S4], raw_output(Tid2))
+
+  , ydb_ets_utils:delete_tuples(Tid2, {test, 2})
+  , ?assertEqual([S3, S4], raw_output(Tid2))
+
+  , ydb_ets_utils:delete_tuples(Tid2, {test, 1})
+  , ?assertEqual([S3, S4], raw_output(Tid2))
+.
+
+
+replace_tuples_test() ->
+    {ok, Tid} = ydb_ets_utils:create_table(test)
+  , {T1, T2, T3, T4, T5, T6} = get_tuples(tuple)
+  , {S1, S2, S3, S4, S5, S6} = get_syn_tuples(tuple)
+
+    % test delete_tuples/3
+  , ydb_ets_utils:add_tuples(Tid, test, [T1, T2, T3, T4])
+  , ?assertEqual([S1, S2, S3, S4], raw_output(Tid))
+
+  , ydb_ets_utils:replace_tuple(Tid, test, T1, T5)
+  , ?assertEqual([S2, S3, S4, S5], raw_output(Tid))
+
+  , ydb_ets_utils:replace_tuple(Tid, test, T3, T6)
+  , ?assertEqual([S2, S4, S5, S6], raw_output(Tid))
+.
+
+extract_timestamps_test() ->
+    Tid = ets:new(diff1, [bag, {keypos, 2}])
+  , ets:insert(Tid, {'+', {row, 1}, {ydb_tuple, 1, {6}}})
+  , ets:insert(Tid, {'+', {row, 2}, {ydb_tuple, 2, {7}}})
+  , ets:insert(Tid, {'+', {row, 3}, {ydb_tuple, 3, {2}}})
+  , ets:insert(Tid, {'-', {row, 10}, {ydb_tuple, 10, {2}}})
+
+  , Timestamps = ydb_ets_utils:extract_timestamps([Tid], 'diff')
+  , ?assertEqual([1, 2, 3, 10], lists:sort(Timestamps))
+
+  , {T1, T2, T3, T4, _T5, _T6} = get_tuples(tuple)
+  , Tid2 = ets:new(nondiff, [bag])
+  , ydb_ets_utils:add_tuples(Tid2, test, [T1, T2, T3, T4])
+
+  , Timestamps2 = ydb_ets_utils:extract_timestamps([Tid2], 'syn')
+  , ?assertEqual([1, 2, 3, 4], lists:sort(Timestamps2))
+
+  , Timestamps3 = ydb_ets_utils:extract_timestamps([Tid2], 'rel')
+  , ?assertEqual([1, 2, 3, 4], lists:sort(Timestamps3))
+.
+
+max_timestamps_test() ->
+    Tid = ets:new(diff1, [bag, {keypos, 2}])
+  , ets:insert(Tid, {'+', {row, 1}, {ydb_tuple, 1, {6}}})
+  , ets:insert(Tid, {'+', {row, 2}, {ydb_tuple, 2, {7}}})
+  , ets:insert(Tid, {'+', {row, 3}, {ydb_tuple, 3, {2}}})
+  , ets:insert(Tid, {'-', {row, 10}, {ydb_tuple, 10, {2}}})
+
+  , Max = ydb_ets_utils:max_timestamp([Tid], 'diff')
+  , ?assertEqual(10, Max)
+
+  , {T1, T2, T3, T4, _T5, _T6} = get_tuples(tuple)
+  , Tid2 = ets:new(nondiff, [bag])
+  , ydb_ets_utils:add_tuples(Tid2, test, [T1, T2, T3, T4])
+
+  , Max2 = ydb_ets_utils:max_timestamp([Tid2], 'syn')
+  , ?assertEqual(4, Max2)
+
+  , Max3 = ydb_ets_utils:max_timestamp([Tid2], 'rel')
+  , ?assertEqual(4, Max3)
+
+  , Max4 = ydb_ets_utils:max_timestamp([Tid], 'rel')
+  , ?assertEqual(-1, Max4)
+.
+
 get_copy_test() ->
     {ok, Tid} = ydb_ets_utils:create_table(test)
   , ets:insert(Tid, get_syn_tuples(list))
@@ -101,17 +196,17 @@ apply_diffs_test() ->
   , Base = ets:new(base, [])
   , ets:insert(Base, [S1, S2, S3])
 
-  , Diff1 = ets:new(diff1, [])
+  , Diff1 = ets:new(diff1, [{keypos, 2}])
   , ets:insert(Diff1, get_diff_tuples('-', T2))
   , ets:insert(Diff1, get_diff_tuples('-', T3))
   , ets:insert(Diff1, get_diff_tuples('+', T4))
 
-  , Diff2 = ets:new(diff2, [])
+  , Diff2 = ets:new(diff2, [{keypos, 2}])
   , ets:insert(Diff2, get_diff_tuples('-', T4))
   , ets:insert(Diff2, get_diff_tuples('+', T5))
   , ets:insert(Diff2, get_diff_tuples('+', T6))
 
-  , Diff3 = ets:new(diff3, [])
+  , Diff3 = ets:new(diff3, [{keypos, 2}])
   , ets:insert(Diff3, get_diff_tuples('-', T6))
   , ets:insert(Diff3, get_diff_tuples('+', T7))
 
@@ -132,7 +227,7 @@ add_diffs_test() ->
       , get_diff_tuples('+', T4)
     }
 
-  , {ok, Diff} = ydb_ets_utils:create_table(diff)
+  , {ok, Diff} = ydb_ets_utils:create_diff_table(diff)
   , ydb_ets_utils:add_diffs(Diff, '+', test, T1)
   , ?assertEqual([D1], raw_output(Diff))
 
@@ -150,16 +245,47 @@ apply_and_add_diffs_test() ->
   , Base = ets:new(base, [])
   , ets:insert(Base, [S1, S2, S3])
 
-  , Diff1 = ets:new(diff1, [])
+  , Diff1 = ets:new(diff1, [{keypos, 2}])
   , ydb_ets_utils:add_diffs(Diff1, '-', test, [T2, T3])
   , ydb_ets_utils:add_diffs(Diff1, '+', test, T4)
 
-  , Diff2 = ets:new(diff2, [])
+  , Diff2 = ets:new(diff2, [{keypos, 2}])
   , ydb_ets_utils:add_diffs(Diff2, '+', test, [T5, T6])
   , ydb_ets_utils:add_diffs(Diff2, '-', test, [T4])
 
   , ydb_ets_utils:apply_diffs(Base, [Diff1, Diff2])
   , ?assertEqual([S1, S5, S6], raw_output(Base))
+.
+
+extract_diffs_test() ->
+    {T1, T2, T3, T4, T5, T6} = get_tuples(tuple)
+  , {D1, D2, D3, D4, D5, D6} = {
+        get_diff_tuples('+', T1)
+      , get_diff_tuples('-', T2)
+      , get_diff_tuples('+', T3)
+      , get_diff_tuples('-', T4)
+      , get_diff_tuples('-', T5)
+      , get_diff_tuples('-', T6)
+    }
+
+  , {ok, Diff} = ydb_ets_utils:create_diff_table(diff)
+  , ydb_ets_utils:add_diffs(Diff, '+', test, [T1, T3])
+  , ydb_ets_utils:add_diffs(Diff, '-', test, [T2, T4, T5, T6])
+  , ?assertEqual(lists:sort([D1, D2, D3, D4, D5, D6]), raw_output(Diff))
+
+  , {Ins, Dels} = ydb_ets_utils:extract_diffs([Diff])
+  , ?assertEqual(lists:sort([T1, T3]), lists:sort(Ins))
+  , ?assertEqual(lists:sort([T2, T4, T5, T6]), lists:sort(Dels))
+
+  , {ok, Diff2} = ydb_ets_utils:create_diff_table(diff2)
+  , {ok, Diff3} = ydb_ets_utils:create_diff_table(diff3)
+  , ydb_ets_utils:add_diffs(Diff2, '+', test, [T1, T3])
+  , ydb_ets_utils:add_diffs(Diff2, '-', test, [T2])
+  , ydb_ets_utils:add_diffs(Diff3, '-', test, [T4, T5, T6])
+
+  , {Ins2, Dels2} = ydb_ets_utils:extract_diffs([Diff2, Diff3])
+  , ?assertEqual(lists:sort([T1, T3]), lists:sort(Ins2))
+  , ?assertEqual(lists:sort([T2, T4, T5, T6]), lists:sort(Dels2))
 .
 
 dump_raw_test() ->
@@ -171,9 +297,22 @@ dump_raw_test() ->
 
 dump_tuples_test() ->
     {ok, Tid} = ydb_ets_utils:create_table(test)
+
+    % test dump_tuples/1
   , ets:insert(Tid, get_syn_tuples(list))
-  , ?assertEqual(
-        get_tuples(list), lists:sort(ydb_ets_utils:dump_tuples(Tid)))
+  , Tuples = lists:sort(ydb_ets_utils:dump_tuples(Tid))
+  , ?assertEqual(get_tuples(list), Tuples)
+
+    % test dump_tuples/2
+  , {T1, T2} = {{ydb_tuple, 4, {6}}, {ydb_tuple, 7, {12}}}
+  , {S1, S2} = {{{blah, 4}, T1}, {{blah, 7}, T2}}
+  , ets:insert(Tid, [S1, S2])
+
+  , Tuples2 = lists:sort(ydb_ets_utils:dump_tuples(Tid, test))
+  , ?assertEqual(get_tuples(list), Tuples2)
+
+  , Tuples3 = lists:sort(ydb_ets_utils:dump_tuples(Tid, blah))
+  , ?assertEqual([T1, T2], Tuples3)
 .
 
 %%% =============================================================== %%%
@@ -202,7 +341,7 @@ get_tuples(tuple) ->
 
 %% @doc converts ydb_tuples to ydb_diff_tuples.
 get_diff_tuples(Diff, Tuple=#ydb_tuple{timestamp=TS}) ->
-    {{Diff, test, TS}, Tuple}
+    {Diff, {test, TS}, Tuple}
 ;
 get_diff_tuples(Diff, Tuples) ->
     lists:map(fun(X) -> get_diff_tuples(Diff, X) end, Tuples)

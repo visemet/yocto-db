@@ -247,7 +247,8 @@ add_diffs(Tid, Diff, Op, Tuples) when is_list(Tuples) ->
 -spec extract_diffs(
     DiffTids :: [ets:tid()]
 ) ->
-    {Ins :: [ydb_plan_node:ydb_tuple()], Dels :: [ydb_plan_node:ydb_tuple()]}
+    {Ins :: [ydb_plan_node:ydb_tuple()]
+  , Dels :: [ydb_plan_node:ydb_tuple()]}
 .
 
 %% @doc Returns the tuples in the table separated into a list of
@@ -304,7 +305,7 @@ extract_timestamps(Tids, rel) ->
     )
 ;
 extract_timestamps(Tids, diff) ->
-    Spec = [{{'_', {'_','$1'},'_'},[],['$1']}]
+    Spec = [{{'_',{'_','$1'},'_'},[],['$1']}]
   , lists:flatten(
         lists:map(fun(X) -> ets:select(X, Spec) end, Tids)
     )
