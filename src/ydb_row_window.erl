@@ -102,7 +102,7 @@ delegate(
 
           , {ok, NewLast} = ydb_ets_utils:create_diff_table(?MODULE)
           , NewDiffs = shift_left(Diffs, NewLast)
-          , NewFirst = get_first(Diffs)
+          , NewFirst = get_first(NewDiffs)
 
             % Insert PLUS (`+') tuple into `NewFirst'
           , ydb_ets_utils:add_diffs(NewFirst, '+', row_window, Tuple)
