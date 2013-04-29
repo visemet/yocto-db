@@ -9,15 +9,25 @@
 -export([init/1, delegate/2, delegate/3, compute_schema/2]).
 
 -record(row_window, {
-    size={1, rows} :: {pos_integer(), rows}
-  , pulse={1, rows} :: {pos_integer(), rows}
+    size=1 :: pos_integer()
+  , pulse=1 :: pos_integer()
+
+  , remain=1 :: non_neg_integer()
+
+  , first :: 'undefined' | ets:tid()
+  , last :: 'undefined' | ets:tid()
 
   , diffs=[] :: [ets:tid()]
 }).
 
 -type row_window() :: #row_window{
-    size :: {pos_integer(), rows}
-  , pulse :: {pos_integer(), rows}
+    size :: pos_integer()
+  , pulse :: pos_integer()
+
+  , remain :: non_neg_integer()
+
+  , first :: 'undefined' | ets:tid()
+  , last :: 'undefined' | ets:tid()
 
   , diffs :: [ets:tid()]
 }.
@@ -139,6 +149,14 @@ compute_schema(Schemas, #row_window{}) ->
 %% @doc Initializes internal state of the window node.
 init([], State = #row_window{}) ->
     {ok, State}
+;
+
+init([{size, {Size, rows}} | Args], State = #row_window{}) ->
+    init(Args, State#row_window{size=Size})
+;
+
+init([{pulse, {Pulse, rows}} | Args], State = #row_window{}) ->
+    init(Args, State#row_window{pulse=Pulse, remain=Pulse})
 ;
 
 init([Term | _Args], #row_window{}) ->
