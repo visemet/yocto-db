@@ -89,10 +89,59 @@ init(Args) when is_list(Args) -> init(Args, #row_window{}).
 
 %% @doc TODO
 delegate(
-    _Request = {tuples, _Tuples}
+    _Request = {tuples, Tuples}
   , State = #row_window{}
 ) ->
-    {ok, State}
+    NewState = lists:foldl(
+        fun (Tuple, S = #row_window{
+            remain = 0
+          , first = First
+          , diffs = Diffs
+        }) ->
+            ydb_plan_node:notify(erlang:self(), {diffs, [First]})
+
+          , {ok, NewLast} = ydb_ets_utils:create_diff_table(?MODULE)
+          , NewDiffs = shift_left(Diffs, NewLast)
+          , NewFirst = get_first(Diffs)
+
+            % Insert PLUS (`+') tuple into `NewFirst'
+          , ydb_ets_utils:add_diffs(NewFirst, '+', row_window, Tuple)
+
+            % Insert MINUS (`-') tuple into `NewLast'
+          , ydb_ets_utils:add_diffs(NewLast, '-', row_window, Tuple)
+
+          , NewRemain = S#row_window.pulse - 1
+
+          , S#row_window{
+                remain=NewRemain
+              , first=NewFirst
+              , last=NewLast
+              , diffs=NewDiffs
+            }
+
+          ; (Tuple, S = #row_window{
+            remain = Remain
+          , first = First
+          , last = Last
+        }) when Remain > 0 ->
+            % Insert PLUS (`+') tuple into `First'
+            ydb_ets_utils:add_diffs(First, '+', row_window, Tuple)
+
+            % Insert MINUS (`-') tuple into `Last'
+          , ydb_ets_utils:add_diffs(Last, '-', row_window, Tuple)
+
+          , NewRemain = Remain - 1
+
+          , S#row_window{
+                remain=NewRemain
+            }
+        end
+
+      , State
+      , Tuples
+    )
+
+  , {ok, NewState}
 ;
 
 delegate(_Request = {info, Message}, State = #row_window{}) ->
@@ -215,6 +264,15 @@ set_last(NewLast, Diffs, MaxSize) ->
       ; Size =:= MaxSize ->
         lists:append(lists:sublist(Diffs, Size - 1), [NewLast])
     end
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec shift_left([ets:tid()], ets:tid()) -> [ets:tid()].
+
+%% @doc Removes the first diff and appends the specific one.
+shift_left(Diffs, NewLast) ->
+    lists:append(erlang:tl(Diffs), [NewLast])
 .
 
 %% ----------------------------------------------------------------- %%
