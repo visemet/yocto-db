@@ -210,7 +210,12 @@ init([{size, {Size, rows}} | Args], State = #row_window{}) ->
       , lists:seq(0, Size) % `Size + 1' diffs
     )
 
-  , init(Args, State#row_window{size=Size, diffs=Diffs})
+  , init(Args, State#row_window{
+        size=Size
+      , first=get_first(Diffs)
+      , last=get_last(Diffs)
+      , diffs=Diffs
+    })
 ;
 
 init([{pulse, {Pulse, rows}} | Args], State = #row_window{}) ->
