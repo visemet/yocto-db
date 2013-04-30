@@ -172,22 +172,30 @@ delegate(
       , Tuples
     )
 
-  , Timestamp = NewState#time_window.latest_timestamp
-  , Sample = (Timestamp - LatestTimestamp) / (CurrTime - LatestSystemTime)
-  , NewArrivalRate = ?ALPHA * ArrivalRate + (1 - ?ALPHA) * Sample
+  , if
+        LatestTimestamp =/= undefined, LatestSystemTime =/= undefined ->
+            Timestamp = NewState#time_window.latest_timestamp
+          , Sample =
+                (Timestamp - LatestTimestamp) / (CurrTime - LatestSystemTime)
 
-  , ApplyAfterTime = erlang:trunc(Pulse / (1000 * NewArrivalRate))
-  , {ok, NewTRef} = timer:apply_after(
-        ApplyAfterTime % in milliseconds
-      , ydb_plan_node
-      , relegate
-      , [erlang:self(), {send_diff}]
-    )
+          , NewArrivalRate = ?ALPHA * ArrivalRate + (1 - ?ALPHA) * Sample
 
-  , {ok, NewState#time_window{
-        arrival_rate=NewArrivalRate
-      , timer_ref=NewTRef
-    }}
+          , ApplyAfterTime = erlang:trunc(Pulse / (1000 * NewArrivalRate))
+          , {ok, NewTRef} = timer:apply_after(
+                ApplyAfterTime % in milliseconds
+              , ydb_plan_node
+              , relegate
+              , [erlang:self(), {send_diff}]
+            )
+
+          , {ok, NewState#time_window{
+                arrival_rate=NewArrivalRate
+              , timer_ref=NewTRef
+            }}
+
+      ; true ->
+            {ok, NewState}
+    end
 ;
 
 delegate({send_diff}, State = #time_window{}) ->
