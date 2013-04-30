@@ -129,6 +129,50 @@ make_nonjoin(
 ;
 
 make_nonjoin(
+    {Type = time_window, Next, Size, Pulse}
+  , PrevId
+  , History
+  , Result
+) when
+    is_tuple(Next)
+  , is_tuple(PrevId)
+  , is_list(Result)
+  ->
+    CurrId = case dict:find(Type, History) of
+        {ok, Value} -> {Type, Value}
+
+      ; error -> {Type, 0}
+    end
+
+  , Listen = case PrevId of
+        % Listens to an input stream
+        {InputStream, BranchType}
+          when
+            is_atom(InputStream)
+          , is_atom(BranchType)
+          ->
+            {ydb_sup_utils:get_branch_pid(InputStream), BranchType}
+
+        % Listens to another node in the query
+      ; {PrevType, PrevValue}
+          when
+            is_atom(PrevType)
+          , is_integer(PrevValue)
+          ->
+            ydb_sup_utils:pid_fun(PrevId)
+    end
+
+  , ChildSpec = prepare_child_spec(CurrId, {ydb_time_window, start_link, [
+        [{size, Size}, {pulse, Pulse}]
+      , [{listen, [Listen]}]
+    ]})
+
+  , NewHistory = dict:update_counter(Type, 1, History)
+
+  , make_nonjoin(Next, CurrId, NewHistory, [ChildSpec|Result])
+;
+
+make_nonjoin(
     {Type = row_window, Next, Size, Pulse}
   , PrevId
   , History
