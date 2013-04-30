@@ -16,6 +16,11 @@
   , pulse=undefined :: 'undefined' | pos_integer() % in microseconds
 
   , boundary=undefined :: 'undefined' | pos_integer() % in microseconds
+  , arrival_rate=1.0 :: float()
+
+    % Times are stored in microseconds
+  , latest_timestamp=undefined :: 'undefined' | non_neg_integer()
+  , latest_system_time=undefined :: 'undefined' | non_neg_integer()
 
   , first :: 'undefined' | ets:tid()
   , last :: 'undefined' | ets:tid()
@@ -28,6 +33,10 @@
   , pulse :: 'undefined' | pos_integer()
 
   , boundary :: 'undefined' | pos_integer()
+  , arrival_rate :: float()
+
+  , latest_timestamp :: 'undefined' | non_neg_integer()
+  , latest_system_time :: 'undefined' | non_neg_integer()
 
   , first :: 'undefined' | ets:tid()
   , last :: 'undefined' | ets:tid()
@@ -108,7 +117,9 @@ delegate(
     _Request = {tuples, Tuples}
   , State = #time_window{}
 ) ->
-    NewState = lists:foldl(
+    {micro_sec, CurrTime} = get_curr_time()
+
+  , NewState = lists:foldl(
         fun (Tuple = #ydb_tuple{timestamp = Timestamp}, S = #time_window{
             pulse = Pulse
           , boundary = Boundary
@@ -334,6 +345,19 @@ set_last(NewLast, Diffs, MaxSize) ->
 %% @doc Removes the first diff and appends the specific one.
 shift_left(Diffs, NewLast) ->
     lists:append(erlang:tl(Diffs), [NewLast])
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec get_curr_time() ->
+    {micro_sec, TimeInMicroSecs :: non_neg_integer()}
+.
+
+%% @private
+%% @doc Gets the current time in microseconds.
+get_curr_time() ->
+    {MegaSecs, Secs, MicroSecs} = erlang:now()
+  , {micro_sec, (MegaSecs * 1000000 + Secs) * 1000000 + MicroSecs}
 .
 
 %% ----------------------------------------------------------------- %%
