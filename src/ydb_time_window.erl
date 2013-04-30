@@ -11,6 +11,8 @@
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
 
+-define(ALPHA, 0.2).
+
 -record(time_window, {
     size=undefined :: 'undefined' | pos_integer() % in microseconds
   , pulse=undefined :: 'undefined' | pos_integer() % in microseconds
@@ -21,6 +23,8 @@
     % Times are stored in microseconds
   , latest_timestamp=undefined :: 'undefined' | non_neg_integer()
   , latest_system_time=undefined :: 'undefined' | non_neg_integer()
+
+  , timer_ref=undefined :: 'undefined' | timer:tref()
 
   , first :: 'undefined' | ets:tid()
   , last :: 'undefined' | ets:tid()
@@ -37,6 +41,8 @@
 
   , latest_timestamp :: 'undefined' | non_neg_integer()
   , latest_system_time :: 'undefined' | non_neg_integer()
+
+  , timer_ref :: 'undefined' | timer:tref()
 
   , first :: 'undefined' | ets:tid()
   , last :: 'undefined' | ets:tid()
@@ -115,14 +121,25 @@ delegate(
 
 delegate(
     _Request = {tuples, Tuples}
-  , State = #time_window{}
+  , State = #time_window{
+        pulse = Pulse
+      , arrival_rate = ArrivalRate
+      , latest_timestamp = LatestTimestamp
+      , latest_system_time = LatestSystemTime
+      , timer_ref = TRef
+    }
 ) ->
-    {micro_sec, CurrTime} = get_curr_time()
+    if
+        TRef =/= undefined -> timer:cancel(TRef)
+
+      ; TRef =:= undefined -> pass
+    end
+
+  , {micro_sec, CurrTime} = get_curr_time()
 
   , NewState = lists:foldl(
         fun (Tuple = #ydb_tuple{timestamp = Timestamp}, S = #time_window{
-            pulse = Pulse
-          , boundary = Boundary
+            boundary = Boundary
           , first = First
           , diffs = Diffs
         }) when Timestamp >= Boundary ->
@@ -143,9 +160,9 @@ delegate(
             % TODO: avoid adjusting boundary in non-uniform way
           , NewBoundary = Timestamp + Pulse
 
-            % TODO: update arrival rate of data
           , S#time_window{
                 boundary=NewBoundary
+              , latest_timestamp=Timestamp
               , first=NewFirst
               , last=NewLast
               , diffs=NewDiffs
@@ -162,15 +179,23 @@ delegate(
             % Insert MINUS (`-') tuple into `Last'
           , ydb_ets_utils:add_diffs(Last, '-', row_window, Tuple)
 
-            % TODO: update arrival rate of data
-          , S
+          , S#time_window{latest_timestamp=Timestamp}
         end
 
       , State
       , Tuples
     )
 
-  , {ok, NewState}
+  , Timestamp = NewState#time_window.latest_timestamp
+  , Sample = (Timestamp - LatestTimestamp) / (CurrTime - LatestSystemTime)
+  , NewArrivalRate = ?ALPHA * ArrivalRate + (1 - ?ALPHA) * Sample
+
+    % TODO: set up timer for `Pulse div NewArrivalRate' microseconds
+    %       from now
+
+  , {ok, NewState#time_window{
+        arrival_rate=NewArrivalRate
+    }}
 ;
 
 delegate(_Request = {info, Message}, State = #time_window{}) ->
