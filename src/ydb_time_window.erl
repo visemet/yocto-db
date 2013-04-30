@@ -8,9 +8,14 @@
 -export([start_link/2, start_link/3]).
 -export([init/1, delegate/2, delegate/3, compute_schema/2]).
 
+%% @headerfile "ydb_plan_node.hrl"
+-include("ydb_plan_node.hrl").
+
 -record(time_window, {
-    size=undefined :: 'undefined' | pos_integer() % in milliseconds
-  , pulse=undefined :: 'undefined' | pos_integer() % in milliseconds
+    size=undefined :: 'undefined' | pos_integer() % in microseconds
+  , pulse=undefined :: 'undefined' | pos_integer() % in microseconds
+
+  , boundary=undefined :: 'undefined' | pos_integer() % in microseconds
 
   , first :: 'undefined' | ets:tid()
   , last :: 'undefined' | ets:tid()
@@ -21,6 +26,8 @@
 -type time_window() :: #time_window{
     size :: 'undefined' | pos_integer()
   , pulse :: 'undefined' | pos_integer()
+
+  , boundary :: 'undefined' | pos_integer()
 
   , first :: 'undefined' | ets:tid()
   , last :: 'undefined' | ets:tid()
@@ -90,10 +97,69 @@ init(Args) when is_list(Args) -> init(Args, #time_window{}).
 
 %% @doc TODO
 delegate(
-    _Request = {tuples, _Tuples}
+    Request = {tuples, [#ydb_tuple{timestamp = Timestamp} | _Rest]}
+  , State = #time_window{pulse = Pulse, boundary = undefined}
+) ->
+    Boundary = Timestamp + Pulse
+  , delegate(Request, State#time_window{boundary=Boundary})
+;
+
+delegate(
+    _Request = {tuples, Tuples}
   , State = #time_window{}
 ) ->
-    {ok, State}
+    NewState = lists:foldl(
+        fun (Tuple = #ydb_tuple{timestamp = Timestamp}, S = #time_window{
+            pulse = Pulse
+          , boundary = Boundary
+          , first = First
+          , diffs = Diffs
+        }) when Timestamp >= Boundary ->
+            ydb_plan_node:notify(erlang:self(), {diffs, [First]})
+
+          , {ok, NewLast} = ydb_ets_utils:create_diff_table(?MODULE)
+          , NewDiffs = shift_left(Diffs, NewLast)
+          , NewFirst = get_first(NewDiffs)
+
+            % TODO: cannot assume that `Tuple' falls in next window
+
+            % Insert PLUS (`+') tuple into `NewFirst'
+          , ydb_ets_utils:add_diffs(NewFirst, '+', row_window, Tuple)
+
+            % Insert MINUS (`-') tuple into `NewLast'
+          , ydb_ets_utils:add_diffs(NewLast, '-', row_window, Tuple)
+
+            % TODO: avoid adjusting boundary in non-uniform way
+          , NewBoundary = Timestamp + Pulse
+
+            % TODO: update arrival rate of data
+          , S#time_window{
+                boundary=NewBoundary
+              , first=NewFirst
+              , last=NewLast
+              , diffs=NewDiffs
+            }
+
+          ; (Tuple = #ydb_tuple{timestamp = Timestamp}, S = #time_window{
+            boundary = Boundary
+          , first = First
+          , last = Last
+        }) when Timestamp < Boundary ->
+            % Insert PLUS (`+') tuple into `First'
+            ydb_ets_utils:add_diffs(First, '+', row_window, Tuple)
+
+            % Insert MINUS (`-') tuple into `Last'
+          , ydb_ets_utils:add_diffs(Last, '-', row_window, Tuple)
+
+            % TODO: update arrival rate of data
+          , S
+        end
+
+      , State
+      , Tuples
+    )
+
+  , {ok, NewState}
 ;
 
 delegate(_Request = {info, Message}, State = #time_window{}) ->
