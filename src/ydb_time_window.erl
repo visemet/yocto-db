@@ -320,6 +320,61 @@ init([Term | _Args], #time_window{}) ->
 
 %% ----------------------------------------------------------------- %%
 
+-spec send_diff(State :: time_window()) -> NewState :: time_window().
+
+%% @doc Sends the subscribers of this window node the first diff. Then
+%%      creates a new table that is inserted into the last position of
+%%      the list after it has been shifted left.
+send_diff(State = #time_window{
+    pulse = Pulse
+  , boundary = Boundary
+  , first = First
+  , diffs = Diffs
+}) ->
+    ydb_plan_node:notify(erlang:self(), {diffs, [First]})
+
+  , {ok, NewLast} = ydb_ets_utils:create_diff_table(?MODULE)
+
+  , NewDiffs = shift_left(Diffs, NewLast)
+  , NewFirst = get_first(NewDiffs)
+
+  , NewBoundary = Boundary + Pulse
+
+  , State#time_window{
+        boundary=NewBoundary
+      , first=NewFirst
+      , last=NewLast
+      , diffs=NewDiffs
+    }
+.
+
+-spec send_diffs_until(
+    Timestamp :: pos_integer()
+  , State :: time_window()
+) ->
+    NewState :: time_window()
+.
+
+%% @doc Sends the subscribers of this window node the first diffs until
+%%      the boundary would exceed the timestamp specified.
+send_diffs_until(Timestamp, State = #time_window{
+    pulse = Pulse
+  , boundary = Boundary
+}) ->
+    NumDiffs = (Timestamp - Boundary) div Pulse
+
+  , lists:foldl(
+        fun (_SeqNum, S) ->
+            send_diff(S)
+        end
+
+      , State
+      , lists:seq(1, NumDiffs)
+    )
+.
+
+%% ----------------------------------------------------------------- %%
+
 -spec get_first([ets:tid()]) -> ets:tid().
 
 %% @doc Returns the first diff.
