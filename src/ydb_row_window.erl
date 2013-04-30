@@ -9,8 +9,8 @@
 -export([init/1, delegate/2, delegate/3, compute_schema/2]).
 
 -record(row_window, {
-    size=1 :: pos_integer()
-  , pulse=1 :: pos_integer()
+    size=undefined :: 'undefined' | pos_integer()
+  , pulse=undefined :: 'undefined' | pos_integer()
 
   , remain=1 :: non_neg_integer()
 
@@ -21,8 +21,8 @@
 }).
 
 -type row_window() :: #row_window{
-    size :: pos_integer()
-  , pulse :: pos_integer()
+    size :: 'undefined' | pos_integer()
+  , pulse :: 'undefined' | pos_integer()
 
   , remain :: non_neg_integer()
 
@@ -200,14 +200,24 @@ init([], State = #row_window{}) ->
     {ok, State}
 ;
 
-init([{size, {Size, rows}} | Args], State = #row_window{}) ->
+init(
+    [{size, {Size, rows}} | Args]
+  , State = #row_window{pulse = undefined}
+) ->
+    init(Args, State#row_window{size=Size})
+;
+
+init(
+    [{size, {Size, rows}} | Args]
+  , State = #row_window{pulse = Pulse}
+) ->
     Diffs = lists:map(
         fun (_SeqNum) ->
             {ok, Tid} = ydb_ets_utils:create_diff_table(?MODULE)
           , Tid
         end
 
-      , lists:seq(0, Size) % `Size + 1' diffs
+      , lists:seq(0, Size div Pulse) % `floor(Size / Pulse) + 1' diffs
     )
 
   , init(Args, State#row_window{
@@ -218,8 +228,32 @@ init([{size, {Size, rows}} | Args], State = #row_window{}) ->
     })
 ;
 
-init([{pulse, {Pulse, rows}} | Args], State = #row_window{}) ->
-    init(Args, State#row_window{pulse=Pulse, remain=Pulse})
+init(
+    [{pulse, {Pulse, rows}} | Args]
+  , State = #row_window{size = undefined}
+) ->
+    init(Args, State#row_window{pulse=Pulse})
+;
+
+init(
+    [{pulse, {Pulse, rows}} | Args]
+  , State = #row_window{size = Size}
+) ->
+    Diffs = lists:map(
+        fun (_SeqNum) ->
+            {ok, Tid} = ydb_ets_utils:create_diff_table(?MODULE)
+          , Tid
+        end
+
+      , lists:seq(0, Size div Pulse) % `floor(Size / Pulse) + 1' diffs
+    )
+
+  , init(Args, State#row_window{
+        pulse=Pulse
+      , first=get_first(Diffs)
+      , last=get_last(Diffs)
+      , diffs=Diffs
+    })
 ;
 
 init([Term | _Args], #row_window{}) ->
