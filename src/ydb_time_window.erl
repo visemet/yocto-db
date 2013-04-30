@@ -140,16 +140,11 @@ delegate(
   , NewState = lists:foldl(
         fun (Tuple = #ydb_tuple{timestamp = Timestamp}, S = #time_window{
             boundary = Boundary
-          , first = First
-          , diffs = Diffs
         }) when Timestamp >= Boundary ->
-            ydb_plan_node:notify(erlang:self(), {diffs, [First]})
+            T = send_diffs_until(Timestamp, S)
 
-          , {ok, NewLast} = ydb_ets_utils:create_diff_table(?MODULE)
-          , NewDiffs = shift_left(Diffs, NewLast)
-          , NewFirst = get_first(NewDiffs)
-
-            % TODO: cannot assume that `Tuple' falls in next window
+          , NewFirst = T#time_window.first
+          , NewLast = T#time_window.last
 
             % Insert PLUS (`+') tuple into `NewFirst'
           , ydb_ets_utils:add_diffs(NewFirst, '+', row_window, Tuple)
@@ -157,16 +152,7 @@ delegate(
             % Insert MINUS (`-') tuple into `NewLast'
           , ydb_ets_utils:add_diffs(NewLast, '-', row_window, Tuple)
 
-            % TODO: avoid adjusting boundary in non-uniform way
-          , NewBoundary = Timestamp + Pulse
-
-          , S#time_window{
-                boundary=NewBoundary
-              , latest_timestamp=Timestamp
-              , first=NewFirst
-              , last=NewLast
-              , diffs=NewDiffs
-            }
+          , T#time_window{latest_timestamp=Timestamp}
 
           ; (Tuple = #ydb_tuple{timestamp = Timestamp}, S = #time_window{
             boundary = Boundary
