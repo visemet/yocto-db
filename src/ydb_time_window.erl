@@ -176,12 +176,22 @@ delegate(
   , Sample = (Timestamp - LatestTimestamp) / (CurrTime - LatestSystemTime)
   , NewArrivalRate = ?ALPHA * ArrivalRate + (1 - ?ALPHA) * Sample
 
-    % TODO: set up timer for `Pulse div NewArrivalRate' microseconds
-    %       from now
+  , ApplyAfterTime = erlang:trunc(Pulse / (1000 * NewArrivalRate))
+  , {ok, NewTRef} = timer:apply_after(
+        ApplyAfterTime % in milliseconds
+      , ydb_plan_node
+      , relegate
+      , [erlang:self(), {send_diff}]
+    )
 
   , {ok, NewState#time_window{
         arrival_rate=NewArrivalRate
+      , timer_ref=NewTRef
     }}
+;
+
+delegate({send_diff}, State = #time_window{}) ->
+    {ok, send_diff(State)}
 ;
 
 delegate(_Request = {info, Message}, State = #time_window{}) ->
