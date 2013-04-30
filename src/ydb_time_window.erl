@@ -355,7 +355,7 @@ send_diffs_until(Timestamp, State = #time_window{
         end
 
       , State
-      , lists:seq(1, NumDiffs)
+      , lists:seq(0, NumDiffs)
     )
 .
 
