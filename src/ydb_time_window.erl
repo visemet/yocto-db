@@ -9,8 +9,8 @@
 -export([init/1, delegate/2, delegate/3, compute_schema/2]).
 
 -record(time_window, {
-    size=5000000 :: pos_integer() % in milliseconds
-  , pulse=1000000 :: pos_integer() % in milliseconds
+    size=undefined :: 'undefined' | pos_integer() % in milliseconds
+  , pulse=undefined :: 'undefined' | pos_integer() % in milliseconds
 
   , first :: 'undefined' | ets:tid()
   , last :: 'undefined' | ets:tid()
@@ -19,8 +19,8 @@
 }).
 
 -type time_window() :: #time_window{
-    size :: pos_integer()
-  , pulse :: pos_integer()
+    size :: 'undefined' | pos_integer()
+  , pulse :: 'undefined' | pos_integer()
 
   , first :: 'undefined' | ets:tid()
   , last :: 'undefined' | ets:tid()
@@ -35,8 +35,8 @@
 %% TODO
 
 -type option() ::
-    {size, {Size :: pos_integer(), time_unit()}}
-  | {pulse, {Pulse :: pos_integer(), time_unit()}}
+    {size, {time_unit(), Size :: pos_integer()}}
+  | {pulse, {time_unit(), Pulse :: pos_integer()}}
 .
 %% TODO
 
@@ -90,10 +90,10 @@ init(Args) when is_list(Args) -> init(Args, #time_window{}).
 
 %% @doc TODO
 delegate(
-    _Request = {tuples, Tuples}
+    _Request = {tuples, _Tuples}
   , State = #time_window{}
 ) ->
-    {ok, NewState}
+    {ok, State}
 ;
 
 delegate(_Request = {info, Message}, State = #time_window{}) ->
@@ -152,6 +152,66 @@ init([], State = #time_window{}) ->
     {ok, State}
 ;
 
+init(
+    [{size, {Unit, Time}} | Args]
+  , State = #time_window{pulse = undefined}
+) ->
+    Size = convert_time({Unit, Time})
+  , init(Args, State#time_window{size=Size})
+;
+
+init(
+    [{size, {Unit, Time}} | Args]
+  , State = #time_window{pulse = Pulse}
+) ->
+    Size = convert_time({Unit, Time})
+  , Diffs = lists:map(
+        fun (_SeqNum) ->
+            {ok, Tid} = ydb_ets_utils:create_diff_table(?MODULE)
+          , Tid
+        end
+
+      , lists:seq(0, Size div Pulse) % `floor(Size / Pulse) + 1' diffs
+    )
+
+  , init(Args, State#time_window{
+        size=Size
+      , first=get_first(Diffs)
+      , last=get_last(Diffs)
+      , diffs=Diffs
+    })
+;
+
+init(
+    [{pulse, {Unit, Time}} | Args]
+  , State = #time_window{size = undefined}
+) ->
+    Pulse = convert_time({Unit, Time})
+  , init(Args, State#time_window{pulse=Pulse})
+;
+
+init(
+    [{pulse, {Unit, Time}} | Args]
+  , State = #time_window{size = Size}
+) ->
+    Pulse = convert_time({Unit, Time})
+  , Diffs = lists:map(
+        fun (_SeqNum) ->
+            {ok, Tid} = ydb_ets_utils:create_diff_table(?MODULE)
+          , Tid
+        end
+
+      , lists:seq(0, Size div Pulse) % `floor(Size / Pulse) + 1' diffs
+    )
+
+  , init(Args, State#time_window{
+        pulse=Pulse
+      , first=get_first(Diffs)
+      , last=get_last(Diffs)
+      , diffs=Diffs
+    })
+;
+
 init([Term | _Args], #time_window{}) ->
     {error, {badarg, Term}}
 .
@@ -208,6 +268,39 @@ set_last(NewLast, Diffs, MaxSize) ->
 %% @doc Removes the first diff and appends the specific one.
 shift_left(Diffs, NewLast) ->
     lists:append(erlang:tl(Diffs), [NewLast])
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec convert_time({Unit :: time_unit(), TimeInUnit :: integer()}) ->
+    TimeInMicroSecs :: integer()
+  | {error, {badarg, Unit :: time_unit()}}
+.
+
+%% @private
+%% @doc Converts a time to microseconds.
+convert_time({micro_sec, MicroSecs}) ->
+    MicroSecs
+;
+
+convert_time({milli_sec, MilliSecs}) ->
+    convert_time({micro_sec, MilliSecs * 1000})
+;
+
+convert_time({sec, Secs}) ->
+    convert_time({milli_sec, Secs * 1000})
+;
+
+convert_time({min, Mins}) ->
+    convert_time({sec, Mins * 60})
+;
+
+convert_time({hour, Hours}) ->
+    convert_time({min, Hours * 60})
+;
+
+convert_time({Unit, _Time}) ->
+    {error, {badarg, Unit}}
 .
 
 %% ----------------------------------------------------------------- %%
