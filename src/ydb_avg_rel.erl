@@ -76,13 +76,6 @@ start_link(Name, Args, Options) ->
     ydb_plan_node:start_link(Name, ?MODULE, Args, Options)
 .
 
-compute_avg(0, _) ->
-    0
-;
-compute_avg(Count, Sum) ->
-    Sum/Count
-.
-
 %% ----------------------------------------------------------------- %%
 
 -spec init(Args :: [option()]) ->
@@ -288,6 +281,19 @@ sub(Sum, NewNum) when is_number(NewNum) ->
     Sum - NewNum
 .
 
+%% ----------------------------------------------------------------- %%
+
+-spec compute_avg(Count :: integer(), Sum :: number()) ->
+    Average :: number().
+
+%% @doc Computes the average given the count and sum. If the count
+%%      is 0, returns 0.
+compute_avg(0, _) ->
+    0
+;
+compute_avg(Count, Sum) ->
+    Sum/Count
+.
 
 %%% =============================================================== %%%
 %%%  private tests                                                  %%%
