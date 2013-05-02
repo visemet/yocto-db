@@ -258,7 +258,7 @@ apply_diffs(Tids, Index, CurrMin, OutTid, SynTid) ->
     % Send to listeners.
   , ydb_plan_node:notify(
         erlang:self()
-      , {diffs, OutTid}
+      , {diffs, [OutTid]}
     )
 
     % Return value to update state.

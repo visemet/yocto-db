@@ -76,6 +76,13 @@ start_link(Name, Args, Options) ->
     ydb_plan_node:start_link(Name, ?MODULE, Args, Options)
 .
 
+compute_avg(0, _) ->
+    0
+;
+compute_avg(Count, Sum) ->
+    Sum/Count
+.
+
 %% ----------------------------------------------------------------- %%
 
 -spec init(Args :: [option()]) ->
@@ -105,7 +112,8 @@ delegate(
   , {CurrCount, CurrSum} = CurrTuple#ydb_tuple.data
 
     % Update the tuple in the output.
-  , ydb_ets_utils:add_diffs(OutTid, '-', avg, CurrTuple)
+  , CurrAvg = compute_avg(CurrCount, CurrSum)
+  , ydb_ets_utils:add_diffs(OutTid, '-', avg, CurrTuple#ydb_tuple{data={CurrAvg}})
   , NewTuple = apply_diffs(Tids, Index, {CurrCount, CurrSum}, OutTid)
 
     % Update the tuple in the synopsis table.
@@ -244,7 +252,7 @@ apply_diffs(Tids, Index, {CurrCount, CurrSum}, OutTid) ->
     % Send to listeners.
   , ydb_plan_node:notify(
         erlang:self()
-      , {diffs, OutTid}
+      , {diffs, [OutTid]}
     )
 
     % Return value to update state.
