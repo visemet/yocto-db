@@ -10,6 +10,7 @@
 
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
+%-include("logging.hrl").
 
 % Testing for private functions.
 -ifdef(TEST).
@@ -103,6 +104,9 @@ delegate(
 
   , [CurrTuple] = ydb_ets_utils:dump_tuples(SynTid)
   , {CurrSum} = CurrTuple#ydb_tuple.data
+
+  %, ?TRACE("curr tuple is: ~p~n curr sum is ~p~n", [CurrTuple, CurrSum])
+  %, ?TRACE("adding to out table ~p~n", [OutTid])
 
     % Update the tuple in the output.
   , ydb_ets_utils:add_diffs(OutTid, '-', sum, CurrTuple)
@@ -217,6 +221,7 @@ post_init(State=#aggr_sum{}) ->
 %% @doc Apply the diffs, update the sum, and output the results to the
 %%      listeners.
 apply_diffs(Tids, Index, CurrSum, OutTid) ->
+    %?TRACE ("received tids ~p~n", [Tids]),
     {Ins, Dels} = ydb_ets_utils:extract_diffs(Tids)
 
     % Apply all inserts, then deletes.
@@ -225,11 +230,13 @@ apply_diffs(Tids, Index, CurrSum, OutTid) ->
       , CurrSum
       , Ins
     )
+   % , ?TRACE("inter sum is ~p~n", [InterSum])
   , NewSum = lists:foldl(
         fun(X, Curr) -> sub(Curr, element(Index, X#ydb_tuple.data)) end
       , InterSum
       , Dels
     )
+   % , ?TRACE("new sum is ~p~n", [NewSum])
 
     % Create a new tuple from this sum.
   , NewTuple = #ydb_tuple{
@@ -237,13 +244,15 @@ apply_diffs(Tids, Index, CurrSum, OutTid) ->
       , timestamp=ydb_ets_utils:max_timestamp(Tids, diff)
     }
 
+ % , ?TRACE("new tuple is ~p~n", [NewTuple])
+
     % Add tuple to diffs table.
   , ydb_ets_utils:add_diffs(OutTid, '+', sum, NewTuple)
 
     % Send to listeners.
   , ydb_plan_node:notify(
         erlang:self()
-      , {diffs, OutTid}
+      , {diffs, [OutTid]}
     )
 
     % Return value to update state.
