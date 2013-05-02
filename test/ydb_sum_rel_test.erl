@@ -28,6 +28,74 @@ start_link_test_helper(DiffTids, Output) ->
   , test_setup2(DiffTids, Answer, 1)
 .
 
+test_setup(DiffTids, Answer, N) ->
+    AggrPid = test_setup_helper(Answer, N)
+  , lists:foreach(fun(X) -> AggrPid ! {diffs, [X]} end, DiffTids)
+  , receive
+        test_passed -> true
+      ; fail -> false
+    end
+.
+
+test_setup2(DiffTids, Answer, N) ->
+    AggrPid = test_setup_helper(Answer, N)
+  , AggrPid ! {diffs, DiffTids}
+  , receive
+        test_passed -> true
+      ; fail -> false
+    end
+.
+
+test_setup_helper(Answer, N) ->
+    Schema = [{num, {1, int}}]
+
+    % Set up a dummy node to pass the schema over.
+  , {ok, DummyPid} = ydb_file_input:start_link([
+        {filename, "../data/select_test_helper.dta"}
+      , {batch_size, 50}
+      , {poke_freq, 1}
+    ], [{schema, Schema}])
+
+    % The aggregate node
+  , {ok, AggrPid} = ydb_sum_rel:start_link([
+        {column, num}
+    ], [{listen, [DummyPid]}])
+  , Listener = spawn(
+        ?MODULE
+      , start_link_test_helper
+      , [self(), 0, N, Answer]
+    )
+  , ydb_plan_node:add_listener(AggrPid, Listener)
+  , AggrPid
+.
+
+start_link_test_helper(Pid, Count, NumResults, Answer)
+  when Count == NumResults - 1 ->
+    receive
+        {diffs, [DiffTid]} ->
+            {ok, Exp} = dict:find(Count, Answer)
+          , ?assertEqual(Exp, extract_tuples(DiffTid))
+          , Pid ! test_passed
+      ; _Other -> Pid ! fail
+    end
+;
+
+start_link_test_helper(Pid, Count, NumResults, Answer) ->
+    receive
+        {diffs, [DiffTid]} ->
+            {ok, Exp} = dict:find(Count, Answer)
+          , ?assertEqual(Exp, extract_tuples(DiffTid))
+          , start_link_test_helper(Pid, Count + 1, NumResults, Answer)
+      ; _Other -> Pid ! fail
+    end
+.
+
+extract_tuples(DiffTid) ->
+    {Ins, Dels} = ydb_ets_utils:extract_diffs([DiffTid])
+  , {lists:sort(Ins), lists:sort(Dels)}
+.
+
+
 % expected output from ydb_ets_utils:extract_diffs/1
 get_diff_tuples() ->
     % {[InsertTuples], [DeleteTuples]}
@@ -48,94 +116,4 @@ get_diff_tables() ->
   , Diff2 = ets:new(diff2, [bag])
   , ets:insert(Diff2, {'-', {row, 2}, {ydb_tuple, 2, {2}}})
   , {Diff1, Diff2}
-.
-
-test_setup(DiffTids, Answer, N) ->
-    Schema = [{num, {1, int}}]
-
-    % Set up a dummy node to pass the schema over.
-  , {ok, DummyPid} = ydb_file_input:start_link([
-        {filename, "../data/select_test_helper.dta"}
-      , {batch_size, 50}
-      , {poke_freq, 1}
-    ], [{schema, Schema}])
-
-    % The aggregate node
-  , {ok, AggrPid} = ydb_sum_rel:start_link([
-        {column, num}
-    ], [{listen, [DummyPid]}])
-  , Listener = spawn(
-        ?MODULE
-      , start_link_test_helper
-      , [self(), 0, N, Answer]
-    )
-  , ydb_plan_node:add_listener(AggrPid, Listener)
-
-  , lists:foreach(fun(X) -> AggrPid ! {diffs, [X]} end, DiffTids)
-
-  , receive
-        test_passed -> true
-      ; fail -> false
-    end
-.
-
-test_setup2(DiffTids, Answer, N) ->
-    Schema = [{num, {1, int}}]
-
-    % Set up a dummy node to pass the schema over.
-  , {ok, DummyPid} = ydb_file_input:start_link([
-        {filename, "../data/select_test_helper.dta"}
-      , {batch_size, 50}
-      , {poke_freq, 1}
-    ], [{schema, Schema}])
-
-    % The aggregate node
-  , {ok, AggrPid} = ydb_sum_rel:start_link([
-        {column, num}
-    ], [{listen, [DummyPid]}])
-  , Listener = spawn(
-        ?MODULE
-      , start_link_test_helper
-      , [self(), 0, N, Answer]
-    )
-  , ydb_plan_node:add_listener(AggrPid, Listener)
-
-  , AggrPid ! {diffs, DiffTids}
-
-  , receive
-        test_passed -> true
-      ; fail -> false
-    end
-.
-
-extract_tuples(DiffTid) ->
-    {Ins, Dels} = ydb_ets_utils:extract_diffs([DiffTid])
-  , {lists:sort(Ins), lists:sort(Dels)}
-.
-
-start_link_test_helper(Pid, Count, NumResults, Answer)
-  when Count == NumResults - 1 ->
-    receive
-        {diffs, [DiffTid]} ->
-            {ok, Output} = dict:find(Count, Answer)
-          , case extract_tuples(DiffTid) of
-                Output -> Pid ! test_passed
-              ; _Other -> Pid ! fail
-            end
-      ; _Other -> Pid ! fail
-    end
-;
-
-start_link_test_helper(Pid, Count, NumResults, Answer) ->
-    receive
-        {diffs, [DiffTid]} ->
-            {ok, Output} = dict:find(Count, Answer)
-          , case extract_tuples(DiffTid) of
-                Output ->
-                    start_link_test_helper(Pid, Count + 1, NumResults, Answer)
-              ; false ->
-                    Pid ! fail
-            end
-      ; _Other -> Pid ! fail
-    end
 .
