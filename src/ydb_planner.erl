@@ -89,6 +89,366 @@ make(
 ;
 
 make(
+    {Type = sum, Column, Prev}
+  , History
+  , Result
+) when
+    is_tuple(Prev)
+  , is_list(Result)
+  ->
+    case make(Prev, History, Result) of
+        {ok, {PrevId, NewHistory, NewResult}} ->
+            CurrId = get_id(Type, NewHistory)
+          , Listen = prepare_listen(PrevId)
+
+          , ChildSpec = prepare_child_spec(CurrId, {
+                ydb_sum, start_link, [
+                    [{column, Column}]
+                  , [{listen, [Listen]}]
+                ]
+            })
+
+          , {ok, {
+                CurrId
+              , dict:update_counter(Type, 1, NewHistory)
+              , [ChildSpec|NewResult]}
+            }
+
+      ; {error, Reason} -> {error, Reason}
+    end
+;
+
+make(
+    {Type = sum_rel, Column, Prev}
+  , History
+  , Result
+) when
+    is_tuple(Prev)
+  , is_list(Result)
+  ->
+    case make(Prev, History, Result) of
+        {ok, {PrevId, NewHistory, NewResult}} ->
+            CurrId = get_id(Type, NewHistory)
+          , Listen = prepare_listen(PrevId)
+
+          , ChildSpec = prepare_child_spec(CurrId, {
+                ydb_sum_rel, start_link, [
+                    [{column, Column}]
+                  , [{listen, [Listen]}]
+                ]
+            })
+
+          , {ok, {
+                CurrId
+              , dict:update_counter(Type, 1, NewHistory)
+              , [ChildSpec|NewResult]}
+            }
+
+      ; {error, Reason} -> {error, Reason}
+    end
+;
+
+make(
+    {Type = count, Column, Prev}
+  , History
+  , Result
+) when
+    is_tuple(Prev)
+  , is_list(Result)
+  ->
+    case make(Prev, History, Result) of
+        {ok, {PrevId, NewHistory, NewResult}} ->
+            CurrId = get_id(Type, NewHistory)
+          , Listen = prepare_listen(PrevId)
+
+          , ChildSpec = prepare_child_spec(CurrId, {
+                ydb_count, start_link, [
+                    [{column, Column}]
+                  , [{listen, [Listen]}]
+                ]
+            })
+
+          , {ok, {
+                CurrId
+              , dict:update_counter(Type, 1, NewHistory)
+              , [ChildSpec|NewResult]}
+            }
+
+      ; {error, Reason} -> {error, Reason}
+    end
+;
+
+make(
+    {Type = count_rel, Column, Prev}
+  , History
+  , Result
+) when
+    is_tuple(Prev)
+  , is_list(Result)
+  ->
+    case make(Prev, History, Result) of
+        {ok, {PrevId, NewHistory, NewResult}} ->
+            CurrId = get_id(Type, NewHistory)
+          , Listen = prepare_listen(PrevId)
+
+          , ChildSpec = prepare_child_spec(CurrId, {
+                ydb_count_rel, start_link, [
+                    [{column, Column}]
+                  , [{listen, [Listen]}]
+                ]
+            })
+
+          , {ok, {
+                CurrId
+              , dict:update_counter(Type, 1, NewHistory)
+              , [ChildSpec|NewResult]}
+            }
+
+      ; {error, Reason} -> {error, Reason}
+    end
+;
+
+make(
+    {Type = min, Column, Prev}
+  , History
+  , Result
+) when
+    is_tuple(Prev)
+  , is_list(Result)
+  ->
+    case make(Prev, History, Result) of
+        {ok, {PrevId, NewHistory, NewResult}} ->
+            CurrId = get_id(Type, NewHistory)
+          , Listen = prepare_listen(PrevId)
+
+          , ChildSpec = prepare_child_spec(CurrId, {
+                ydb_min, start_link, [
+                    [{column, Column}]
+                  , [{listen, [Listen]}]
+                ]
+            })
+
+          , {ok, {
+                CurrId
+              , dict:update_counter(Type, 1, NewHistory)
+              , [ChildSpec|NewResult]}
+            }
+
+      ; {error, Reason} -> {error, Reason}
+    end
+;
+
+make(
+    {Type = min_rel, Column, Prev}
+  , History
+  , Result
+) when
+    is_tuple(Prev)
+  , is_list(Result)
+  ->
+    case make(Prev, History, Result) of
+        {ok, {PrevId, NewHistory, NewResult}} ->
+            CurrId = get_id(Type, NewHistory)
+          , Listen = prepare_listen(PrevId)
+
+          , ChildSpec = prepare_child_spec(CurrId, {
+                ydb_min_rel, start_link, [
+                    [{column, Column}]
+                  , [{listen, [Listen]}]
+                ]
+            })
+
+          , {ok, {
+                CurrId
+              , dict:update_counter(Type, 1, NewHistory)
+              , [ChildSpec|NewResult]}
+            }
+
+      ; {error, Reason} -> {error, Reason}
+    end
+;
+
+make(
+    {Type = max, Column, Prev}
+  , History
+  , Result
+) when
+    is_tuple(Prev)
+  , is_list(Result)
+  ->
+    case make(Prev, History, Result) of
+        {ok, {PrevId, NewHistory, NewResult}} ->
+            CurrId = get_id(Type, NewHistory)
+          , Listen = prepare_listen(PrevId)
+
+          , ChildSpec = prepare_child_spec(CurrId, {
+                ydb_max, start_link, [
+                    [{column, Column}]
+                  , [{listen, [Listen]}]
+                ]
+            })
+
+          , {ok, {
+                CurrId
+              , dict:update_counter(Type, 1, NewHistory)
+              , [ChildSpec|NewResult]}
+            }
+
+      ; {error, Reason} -> {error, Reason}
+    end
+;
+
+make(
+    {Type = max_rel, Column, Prev}
+  , History
+  , Result
+) when
+    is_tuple(Prev)
+  , is_list(Result)
+  ->
+    case make(Prev, History, Result) of
+        {ok, {PrevId, NewHistory, NewResult}} ->
+            CurrId = get_id(Type, NewHistory)
+          , Listen = prepare_listen(PrevId)
+
+          , ChildSpec = prepare_child_spec(CurrId, {
+                ydb_max_rel, start_link, [
+                    [{column, Column}]
+                  , [{listen, [Listen]}]
+                ]
+            })
+
+          , {ok, {
+                CurrId
+              , dict:update_counter(Type, 1, NewHistory)
+              , [ChildSpec|NewResult]}
+            }
+
+      ; {error, Reason} -> {error, Reason}
+    end
+;
+
+make(
+    {Type = var, Column, Prev}
+  , History
+  , Result
+) when
+    is_tuple(Prev)
+  , is_list(Result)
+  ->
+    case make(Prev, History, Result) of
+        {ok, {PrevId, NewHistory, NewResult}} ->
+            CurrId = get_id(Type, NewHistory)
+          , Listen = prepare_listen(PrevId)
+
+          , ChildSpec = prepare_child_spec(CurrId, {
+                ydb_var, start_link, [
+                    [{column, Column}]
+                  , [{listen, [Listen]}]
+                ]
+            })
+
+          , {ok, {
+                CurrId
+              , dict:update_counter(Type, 1, NewHistory)
+              , [ChildSpec|NewResult]}
+            }
+
+      ; {error, Reason} -> {error, Reason}
+    end
+;
+
+make(
+    {Type = var_rel, Column, Prev}
+  , History
+  , Result
+) when
+    is_tuple(Prev)
+  , is_list(Result)
+  ->
+    case make(Prev, History, Result) of
+        {ok, {PrevId, NewHistory, NewResult}} ->
+            CurrId = get_id(Type, NewHistory)
+          , Listen = prepare_listen(PrevId)
+
+          , ChildSpec = prepare_child_spec(CurrId, {
+                ydb_var_rel, start_link, [
+                    [{column, Column}]
+                  , [{listen, [Listen]}]
+                ]
+            })
+
+          , {ok, {
+                CurrId
+              , dict:update_counter(Type, 1, NewHistory)
+              , [ChildSpec|NewResult]}
+            }
+
+      ; {error, Reason} -> {error, Reason}
+    end
+;
+
+make(
+    {Type = stddev, Column, Prev}
+  , History
+  , Result
+) when
+    is_tuple(Prev)
+  , is_list(Result)
+  ->
+    case make(Prev, History, Result) of
+        {ok, {PrevId, NewHistory, NewResult}} ->
+            CurrId = get_id(Type, NewHistory)
+          , Listen = prepare_listen(PrevId)
+
+          , ChildSpec = prepare_child_spec(CurrId, {
+                ydb_stddev, start_link, [
+                    [{column, Column}]
+                  , [{listen, [Listen]}]
+                ]
+            })
+
+          , {ok, {
+                CurrId
+              , dict:update_counter(Type, 1, NewHistory)
+              , [ChildSpec|NewResult]}
+            }
+
+      ; {error, Reason} -> {error, Reason}
+    end
+;
+
+make(
+    {Type = stddev_rel, Column, Prev}
+  , History
+  , Result
+) when
+    is_tuple(Prev)
+  , is_list(Result)
+  ->
+    case make(Prev, History, Result) of
+        {ok, {PrevId, NewHistory, NewResult}} ->
+            CurrId = get_id(Type, NewHistory)
+          , Listen = prepare_listen(PrevId)
+
+          , ChildSpec = prepare_child_spec(CurrId, {
+                ydb_stddev_rel, start_link, [
+                    [{column, Column}]
+                  , [{listen, [Listen]}]
+                ]
+            })
+
+          , {ok, {
+                CurrId
+              , dict:update_counter(Type, 1, NewHistory)
+              , [ChildSpec|NewResult]}
+            }
+
+      ; {error, Reason} -> {error, Reason}
+    end
+;
+
+make(
     {Type = time_window, Size, Pulse, Prev}
   , History
   , Result
