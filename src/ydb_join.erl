@@ -163,6 +163,48 @@ init([], State = #join{}) ->
     {ok, State}
 ;
 
+init(
+    [{left, {size, {row, Size}}, {pulse, {row, Pulse}}} | Args]
+  , State = #join{})
+  ->
+    LeftHistorySize = Size div Pulse
+
+  , init(Args, State#join{left_history_size=LeftHistorySize})
+;
+
+init(
+    [{left, {size, SizeTuple}, {pulse, PulseTuple}} | Args]
+  , State = #join{})
+  ->
+    Size = ydb_time_utils:convert_time(SizeTuple)
+  , Pulse = ydb_time_utils:convert_time(PulseTuple)
+
+  , LeftHistorySize = Size div Pulse
+
+  , init(Args, State#join{left_history_size=LeftHistorySize})
+;
+
+init(
+    [{right, {size, {row, Size}}, {pulse, {row, Pulse}}} | Args]
+  , State = #join{})
+  ->
+    RightHistorySize = Size div Pulse
+
+  , init(Args, State#join{right_history_size=RightHistorySize})
+;
+
+init(
+    [{right, {size, SizeTuple}, {pulse, PulseTuple}} | Args]
+  , State = #join{})
+  ->
+    Size = ydb_time_utils:convert_time(SizeTuple)
+  , Pulse = ydb_time_utils:convert_time(PulseTuple)
+
+  , RightHistorySize = Size div Pulse
+
+  , init(Args, State#join{right_history_size=RightHistorySize})
+;
+
 init([Term | _Args], #join{}) ->
     {error, {badarg, Term}}
 .
