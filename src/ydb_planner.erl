@@ -29,6 +29,66 @@ make({input_stream, Name, Type}, History, Result) ->
 ;
 
 make(
+    {Type = select, Predicate, Prev}
+  , History
+  , Result
+) when
+    is_tuple(Prev)
+  , is_list(Result)
+  ->
+    case make(Prev, History, Result) of
+        {ok, {PrevId, NewHistory, NewResult}} ->
+            CurrId = get_id(Type, NewHistory)
+          , Listen = prepare_listen(PrevId)
+
+          , ChildSpec = prepare_child_spec(CurrId, {
+                ydb_select, start_link, [
+                    [{predicate, Predicate}]
+                  , [{listen, [Listen]}]
+                ]
+            })
+
+          , {ok, {
+                CurrId
+              , dict:update_counter(Type, 1, NewHistory)
+              , [ChildSpec|NewResult]}
+            }
+
+      ; {error, Reason} -> {error, Reason}
+    end
+;
+
+make(
+    {Type = project, Columns, Prev}
+  , History
+  , Result
+) when
+    is_tuple(Prev)
+  , is_list(Result)
+  ->
+    case make(Prev, History, Result) of
+        {ok, {PrevId, NewHistory, NewResult}} ->
+            CurrId = get_id(Type, NewHistory)
+          , Listen = prepare_listen(PrevId)
+
+          , ChildSpec = prepare_child_spec(CurrId, {
+                ydb_project, start_link, [
+                    [{columns, Columns}]
+                  , [{listen, [Listen]}]
+                ]
+            })
+
+          , {ok, {
+                CurrId
+              , dict:update_counter(Type, 1, NewHistory)
+              , [ChildSpec|NewResult]}
+            }
+
+      ; {error, Reason} -> {error, Reason}
+    end
+;
+
+make(
     {Type = file_output, Filename, Prev}
   , History
   , Result
