@@ -89,6 +89,66 @@ make(
 ;
 
 make(
+    {Type = time_window, Size, Pulse, Prev}
+  , History
+  , Result
+) when
+    is_tuple(Prev)
+  , is_list(Result)
+  ->
+    case make(Prev, History, Result) of
+        {ok, {PrevId, NewHistory, NewResult}} ->
+            CurrId = get_id(Type, NewHistory)
+          , Listen = prepare_listen(PrevId)
+
+          , ChildSpec = prepare_child_spec(CurrId, {
+                ydb_time_window, start_link, [
+                    [{size, Size}, {pulse, Pulse}]
+                  , [{listen, [Listen]}]
+                ]
+            })
+
+          , {ok, {
+                CurrId
+              , dict:update_counter(Type, 1, NewHistory)
+              , [ChildSpec|NewResult]}
+            }
+
+      ; {error, Reason} -> {error, Reason}
+    end
+;
+
+make(
+    {Type = row_window, Size, Pulse, Prev}
+  , History
+  , Result
+) when
+    is_tuple(Prev)
+  , is_list(Result)
+  ->
+    case make(Prev, History, Result) of
+        {ok, {PrevId, NewHistory, NewResult}} ->
+            CurrId = get_id(Type, NewHistory)
+          , Listen = prepare_listen(PrevId)
+
+          , ChildSpec = prepare_child_spec(CurrId, {
+                ydb_row_window, start_link, [
+                    [{size, Size}, {pulse, Pulse}]
+                  , [{listen, [Listen]}]
+                ]
+            })
+
+          , {ok, {
+                CurrId
+              , dict:update_counter(Type, 1, NewHistory)
+              , [ChildSpec|NewResult]}
+            }
+
+      ; {error, Reason} -> {error, Reason}
+    end
+;
+
+make(
     {Type = file_output, Filename, Prev}
   , History
   , Result
@@ -147,7 +207,6 @@ make(
       ; {error, Reason} -> {error, Reason}
     end
 ;
-
 
 make(Query, _History, _Result) ->
     {error, {badarg, Query}}
