@@ -114,52 +114,12 @@ delegate(
   , State = #join{left_pid = LeftPid, right_pid = RightPid}
 ) ->
     NewState = lists:foldl(
-        fun (Diff, S = #join{parity = Parity, output_diffs = OutputDiffs}) ->
+        fun (Diff, S = #join{}) ->
             case get_owner(Diff, LeftPid, RightPid) of
-                left ->
-                    RightHistorySize = S#join.right_history_size
-                  , RightDiffs = S#join.right_diffs
+                left -> received_left(Diff, S)
 
-                  , OutputDiff = if
-                        Parity > 0 -> erlang:hd(OutputDiffs)
-
-                      ; Parity =< 0 ->
-                            {ok, Tid} = ydb_ets_utils:create_diff_table(
-                                ?MODULE
-                            )
-
-                          , Tid
-                    end
-
-                  , join_diffs(
-                        Diff
-                      , lists:sublist(RightDiffs, RightHistorySize)
-                      , OutputDiff
-                    )
-
-              ; right ->
-                    LeftHistorySize = S#join.left_history_size
-                  , LeftDiffs = S#join.left_diffs
-
-                  , OutputDiff = if
-                        Parity > 0 -> erlang:hd(OutputDiffs)
-
-                      ; Parity =< 0 ->
-                            {ok, Tid} = ydb_ets_utils:create_diff_table(
-                                ?MODULE
-                            )
-
-                          , Tid
-                    end
-
-                  , join_diffs(
-                        lists:sublist(LeftDiffs, LeftHistorySize)
-                      , Diff
-                      , OutputDiff
-                    )
+              ; right -> received_right(Diff, S)
             end
-
-          , S#join{}
         end
 
       , State
@@ -290,18 +250,204 @@ init([Term | _Args], #join{}) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec received_left(State :: join()) -> NewState :: join().
-
-%% @doc TODO
-received_left(State) ->
-    State
+-spec received_left(LeftDiff :: ets:tid(), State :: join()) ->
+    NewState :: join()
 .
 
--spec received_right(State :: join()) -> NewState :: join().
+%% @doc TODO
+received_left(LeftDiff, State = #join{
+    left_history_size = LeftHistorySize
+  , right_history_size = RightHistorySize
+  , parity = Parity
+  , left_diffs = LeftDiffs
+  , right_diffs = RightDiffs
+  , output_diffs = OutputDiffs
+}) ->
+    NumLeftDiffs = erlang:length(LeftDiffs)
+  , NumRightDiffs = erlang:length(RightDiffs)
+
+  , NewOutputDiffs = if
+        NumLeftDiffs < NumRightDiffs + Parity -> OutputDiffs
+
+        % Need to create new table
+      ; NumLeftDiffs >= NumRightDiffs + Parity ->
+            {ok, Tid} = ydb_ets_utils:create_diff_table(?MODULE)
+          , lists:append(OutputDiffs, [Tid])
+    end
+
+  , DiffsTuple = {LeftDiff, RightDiffs, NewOutputDiffs}
+
+    % Do forward join using right history size
+  , left_backward_join(DiffsTuple, Parity, RightHistorySize)
+
+    % Do backward join using left history size
+  , left_forward_join(DiffsTuple, Parity, LeftHistorySize)
+
+  , NewLeftDiffs = case evict_left_diffs(
+        Parity
+      , LeftHistorySize
+      , NumRightDiffs
+    ) of
+        true -> erlang:tl(lists:append(LeftDiffs, [LeftDiff]))
+
+      ; false -> lists:append(LeftDiffs, [LeftDiff])
+    end
+
+  , NewRightDiffs = if
+        NumRightDiffs =:= 0 -> RightDiffs
+
+      ; NumRightDiffs > 0 ->
+            case evict_right_diffs(Parity, RightHistorySize, NumLeftDiffs) of
+                true -> erlang:tl(RightDiffs)
+
+              ; false -> RightDiffs
+            end
+    end
+
+    % Define parity as `-1' when diff was evicted, and `0' otherwise
+  , LeftParity = erlang:length(NewLeftDiffs) - NumLeftDiffs - 1
+    % Define parity as `1' when diff was evicted, and `0' otherwise
+  , RightParity = NumRightDiffs - erlang:length(NewRightDiffs)
+
+  , NewParity = Parity + LeftParity + RightParity
+
+  , if
+        (Parity > 0 andalso LeftParity =:= -1)
+        orelse (Parity < 0 andalso RightParity =:= 1) ->
+            ydb_plan_node:notify(
+                erlang:self()
+              , {diffs, [erlang:hd(NewOutputDiffs)]}
+            )
+
+          , State#join{
+                parity=NewParity
+              , left_diffs=NewLeftDiffs
+              , right_diffs=NewRightDiffs
+              , output_diffs=erlang:tl(NewOutputDiffs)
+            }
+
+      ; true ->
+            State#join{
+                parity=NewParity
+              , left_diffs=NewLeftDiffs
+              , right_diffs=NewRightDiffs
+              , output_diffs=NewOutputDiffs
+            }
+    end
+.
+
+-spec received_right(RightDiff :: ets:tid(), State :: join()) ->
+    NewState :: join()
+.
 
 %% @doc TODO
-received_right(State) ->
-    State
+received_right(RightDiff, State = #join{
+    left_history_size = LeftHistorySize
+  , right_history_size = RightHistorySize
+  , parity = Parity
+  , left_diffs = LeftDiffs
+  , right_diffs = RightDiffs
+  , output_diffs = OutputDiffs
+}) ->
+    NumLeftDiffs = erlang:length(LeftDiffs)
+  , NumRightDiffs = erlang:length(RightDiffs)
+
+  , NewOutputDiffs = if
+        NumRightDiffs < NumLeftDiffs - Parity -> OutputDiffs
+
+        % Need to create new table
+      ; NumRightDiffs >= NumLeftDiffs - Parity ->
+            {ok, Tid} = ydb_ets_utils:create_diff_table(?MODULE)
+          , lists:append(OutputDiffs, [Tid])
+    end
+
+  , DiffsTuple = {LeftDiffs, RightDiff, NewOutputDiffs}
+
+    % Do forward join using right history size
+  , right_backward_join(DiffsTuple, Parity, LeftHistorySize)
+
+    % Do backward join using left history size
+  , right_forward_join(DiffsTuple, Parity, RightHistorySize)
+
+  , NewRightDiffs = case evict_right_diffs(
+        Parity
+      , RightHistorySize
+      , NumLeftDiffs
+    ) of
+        true -> erlang:tl(lists:append(RightDiffs, [RightDiff]))
+
+      ; false -> lists:append(RightDiffs, [RightDiff])
+    end
+
+  , NewLeftDiffs = if
+        NumLeftDiffs =:= 0 -> LeftDiffs
+
+      ; NumLeftDiffs > 0 ->
+            case evict_left_diffs(Parity, LeftHistorySize, NumRightDiffs) of
+                true -> erlang:tl(LeftDiffs)
+
+              ; false -> LeftDiffs
+            end
+    end
+
+    % Define parity as `-1' when diff was evicted, and `0' otherwise
+  , LeftParity = erlang:length(NewLeftDiffs) - NumLeftDiffs
+    % Define parity as `1' when diff was evicted, and `0' otherwise
+  , RightParity = NumRightDiffs - erlang:length(NewRightDiffs) + 1
+
+  , NewParity = Parity + LeftParity + RightParity
+
+  , if
+        (Parity > 0 andalso LeftParity =:= -1)
+        orelse (Parity < 0 andalso RightParity =:= 1) ->
+            ydb_plan_node:notify(
+                erlang:self()
+              , {diffs, [erlang:hd(NewOutputDiffs)]}
+            )
+
+          , State#join{
+                parity=NewParity
+              , left_diffs=NewLeftDiffs
+              , right_diffs=NewRightDiffs
+              , output_diffs=erlang:tl(NewOutputDiffs)
+            }
+
+      ; true ->
+            State#join{
+                parity=NewParity
+              , left_diffs=NewLeftDiffs
+              , right_diffs=NewRightDiffs
+              , output_diffs=NewOutputDiffs
+            }
+    end
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec evict_left_diffs(
+    Offset :: integer()
+  , HistorySize :: pos_integer()
+  , NumRightDiffs :: non_neg_integer()
+) ->
+    boolean()
+.
+
+%% @doc TODO
+evict_left_diffs(Offset, HistorySize, NumRightDiffs) ->
+    NumRightDiffs + Offset >= 1 + HistorySize
+.
+
+-spec evict_right_diffs(
+    Offset :: integer()
+  , HistorySize :: pos_integer()
+  , NumLeftDiffs :: non_neg_integer()
+) ->
+    boolean()
+.
+
+%% @doc TODO
+evict_right_diffs(Offset, HistorySize, NumLeftDiffs) ->
+    NumLeftDiffs - Offset >= 1 + HistorySize
 .
 
 
