@@ -124,10 +124,7 @@ delegate(
   , {ok, State}
 ;
 
-delegate(
-    _Request = {diffs, Tids}
-  , State = #project{}
-) ->
+delegate(_Request = {diffs, Tids}, State = #project{}) ->
     {ok, OutTid} = ydb_ets_utils:create_diff_table(project)
   , check_diffs(Tids, State, OutTid)
   , {ok, State}
