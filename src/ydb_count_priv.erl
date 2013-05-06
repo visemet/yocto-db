@@ -20,30 +20,30 @@
 %%%  internal records and types                                     %%%
 %%% =============================================================== %%%
 
+-record(mech_state, {time :: integer(), value :: number()}).
+
+-type mech_state() :: #mech_state{
+    time :: integer()
+  , value :: number()
+}.
+%% Internal mechanism state.
+
 -record(aggr_count, {
     column :: atom() | {atom(), atom()}
   , index :: integer()
-  , curr_l :: {integer(), number()}
-  , curr_m={0, 0} :: {integer(), number()}
+  , curr_l :: mech_state()
+  , curr_m = #mech_state{time=0, value=0} :: mech_state()
   , epsilon=0.01 :: number()
 }).
 
 -type aggr_count() :: #aggr_count{
     column :: undefined | atom() | {atom(), atom()}
   , index :: undefined | integer()
-  , curr_l :: undefined | {integer(), number()}
-  , curr_m :: {integer(), number()}
+  , curr_l :: undefined | mech_state()
+  , curr_m :: mech_state()
   , epsilon :: number()
 }.
 %% Internal count aggregate state.
-
-%-record(mech_state, {time :: integer(), value :: number()}).
-
-%-type mech_state() :: #mech_state{
-%    time :: integer()
-%  , value :: number()
-%}.
-%% Internal mechanism state.
 
 -type option() ::
     {column, Column :: atom() | {ColName :: atom(), NewName :: atom()}}.
@@ -212,12 +212,14 @@ init([Term | _Args], #aggr_count{}) ->
 
 %% ----------------------------------------------------------------- %%
 
-%% -spec TODO
+-spec get_count(Lap :: mech_state(), Bin :: mech_state()) ->
+    integer()
+.
 
 %% @doc Combines the state of the Laplace and Binary mechanism
 %%      to obtain the current count (as an integer).
-get_count(_Lap={_LTime, LVal}, _Bin={_MTime, MVal}) ->
-    round(LVal) + round(MVal)
+get_count(Lap, Bin) ->
+    round(Lap#mech_state.value) + round(Bin#mech_state.value)
 .
 
 %% ----------------------------------------------------------------- %%
@@ -225,12 +227,11 @@ get_count(_Lap={_LTime, LVal}, _Bin={_MTime, MVal}) ->
 -spec check_tuple(
     Tuple :: ydb_plan_node:ydb_tuple()
   , Index :: integer()
-  , CurrL :: undefined | {integer(), number()} % mech_state()
-  , CurrM :: {integer(), number()} % mech_state()
+  , CurrL :: undefined | mech_state()
+  , CurrM :: mech_state()
   , Epsilon :: number()
 ) ->
-    %{NewL :: mech_state(), NewM :: mech_state()}
-    {NewL :: {integer(), number()}, NewM :: {integer(), number()}}
+    {NewL :: mech_state(), NewM :: mech_state()}
 .
 
 %% @private
@@ -240,23 +241,25 @@ check_tuple(
     Tuple=#ydb_tuple{timestamp=Timestamp}
   , Index
   , undefined
-  , CurrM
+  , CurrM = #mech_state{}
   , Epsilon
 ) ->
-    check_tuple(Tuple, Index, {Timestamp-1, 0}, CurrM, Epsilon)
+    check_tuple(
+        Tuple, Index, #mech_state{time=Timestamp-1, value=0}, CurrM, Epsilon)
 ;
 
 check_tuple(
     Tuple=#ydb_tuple{data=Data, timestamp=Timestamp}
   , Index
-  , CurrL
-  , CurrM
+  , CurrL = #mech_state{} % #ydb_tuple.data
+  , CurrM = #mech_state{}
   , Epsilon
 ) ->
     RelevantData = element(Index, Data)
   , NewCount = update_count(get_count(CurrL, CurrM), RelevantData)
-  , NewL = do_laplace_advance(CurrL, {Timestamp, NewCount}, Epsilon)
-  , NewM = do_binary_advance(CurrM, {Timestamp, NewCount}, NewL, Epsilon)
+  , NewState = #mech_state{time=Timestamp, value=NewCount}
+  , NewL = do_laplace_advance(CurrL, NewState, Epsilon)
+  , NewM = do_binary_advance(CurrM, NewState, NewL, Epsilon)
   , NoisyCount = get_count(NewL, NewM)
   , NewTuple = Tuple#ydb_tuple{data=list_to_tuple([NoisyCount])}
   , ydb_plan_node:notify(
@@ -293,13 +296,18 @@ find_case(_NextPower, _T2) ->
 %% TODO: should this round the counts here ???
 %%       do that thing david talked about ???? (seems annoying though)
 %        round counts when we return the value (is what I like the best)
-do_laplace_advance(Curr={T1, V1}, New={T2, V2}, Eps) ->
+do_laplace_advance(
+    Curr=#mech_state{time=T1, value=V1}
+  , New=#mech_state{time=T2, value=V2}
+  , Eps
+) ->
     Gnp1 = ydb_private_utils:get_next_power(T1)
   , case find_case(Gnp1, T2) of
         1 -> Curr
-      ; 2 -> {Gnp1, apply_log_mech(V2, Eps)}
-      ; 3 -> {Gnp1, apply_log_mech(V1, Eps)}
-      ; 4 -> do_laplace_advance({Gnp1, apply_log_mech(V1, Eps)}, New, Eps)
+      ; 2 -> #mech_state{time=Gnp1, value=apply_log_mech(V2, Eps)}
+      ; 3 -> #mech_state{time=Gnp1, value=apply_log_mech(V1, Eps)}
+      ; 4 -> do_laplace_advance(
+                #mech_state{time=Gnp1, value=apply_log_mech(V1, Eps)}, New, Eps)
     end
 .
 
@@ -318,10 +326,14 @@ apply_log_mech(Value, Eps) ->
 
 %% @doc TODO
 %% TODO can't remember if Eps is included in the laplace paramter
-do_binary_advance(_Curr={T1, _V1}, _New={T, V}, _Lap={TL, VL}, _Eps) ->
+do_binary_advance(
+    _Curr=#mech_state{time=T1}
+  , _New=#mech_state{time=T, value=V}
+  , _Lap=#mech_state{time=TL, value=VL}
+  , _Eps) ->
     {T2, V2} = {T - TL, V - VL}
   , Interval = TL
-  , {T2, add_binary_noise(V2, Interval, T2-T1)}
+  , #mech_state{time=T2, value=add_binary_noise(V2, Interval, T2-T1)}
 .
 
 %% ----------------------------------------------------------------- %%
