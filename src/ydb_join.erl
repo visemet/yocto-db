@@ -11,6 +11,9 @@
 %% @headerfile "ydb_time.hrl"
 -include("ydb_time.hrl").
 
+%% @headerfile "ydb_plan_node.hrl"
+-include("ydb_plan_node.hrl").
+
 -record(join, {
     left_history_size=1 :: pos_integer()
   , right_history_size=1 :: pos_integer()
@@ -207,6 +210,79 @@ init(
 
 init([Term | _Args], #join{}) ->
     {error, {badarg, Term}}
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec cross_product(
+    LeftDiff :: ets:tid()
+  , RightDiff :: ets:tid()
+  , OutputDiff :: ets:tid()
+) ->
+    ok
+.
+
+%% @doc Takes the signed Cartesian product of two diffs.
+cross_product(LeftDiff, RightDiff, OutputDiff) ->
+    {LeftPlus, LeftMinus} = ydb_ets_utils:extract_diffs([LeftDiff])
+  , {RightPlus, RightMinus} = ydb_ets_utils:extract_diffs([RightDiff])
+
+    % PLUS x PLUS -> PLUS
+  , lists:foreach(
+        fun (LeftTuple = #ydb_tuple{}) ->
+            OutputTuples = lists:map(
+                fun (RightTuple = #ydb_tuple{}) ->
+                    merge_tuples(LeftTuple, RightTuple)
+                end
+
+              , RightPlus
+            )
+
+          , ydb_ets_utils:add_diffs(OutputDiff, '+', join, OutputTuples)
+        end
+
+      , LeftPlus
+    )
+
+    % MINUS x MINUS -> MINUS
+  , lists:foreach(
+        fun (LeftTuple = #ydb_tuple{}) ->
+            OutputTuples = lists:map(
+                fun (RightTuple = #ydb_tuple{}) ->
+                    merge_tuples(LeftTuple, RightTuple)
+                end
+
+              , RightMinus
+            )
+
+          , ydb_ets_utils:add_diffs(OutputDiff, '-', join, OutputTuples)
+        end
+
+      , LeftMinus
+    )
+.
+
+-spec merge_tuples(
+    LeftTuple :: ydb_plan_node:ydb_tuple()
+  , RightTuple :: ydb_plan_node:ydb_tuple()
+) ->
+    OutputTuple :: ydb_plan_node:ydb_tuple()
+.
+
+%% @doc Appends two tuples together.
+merge_tuples(
+    #ydb_tuple{data = LeftData}
+  , #ydb_tuple{data = RightData}
+) ->
+    Timestamp = ydb_time_utils:get_curr_time()
+  , Data = erlang:list_to_tuple(
+        lists:append(
+            erlang:tuple_to_list(LeftData)
+          , erlang:tuple_to_list(RightData)
+        )
+    )
+
+  , #ydb_tuple{timestamp=Timestamp, data=Data}
 .
 
 %% ----------------------------------------------------------------- %%
