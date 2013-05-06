@@ -569,6 +569,54 @@ make(
 ;
 
 make(
+    {
+        Type = join
+      , LeftSize
+      , LeftPulse
+      , RightSize
+      , RightPulse
+      , LeftPrev
+      , RightPrev
+    }
+  , History
+  , Result
+) when
+    is_tuple(LeftPrev)
+  , is_tuple(RightPrev)
+  , is_list(Result)
+  ->
+    case make(LeftPrev, History, Result) of
+        {ok, {LeftPrevId, LeftNewHistory, LeftNewResult}} ->
+            case make(RightPrev, LeftNewHistory, LeftNewResult) of
+                {ok, {RightPrevId, RightNewHistory, RightNewResult}} ->
+                    CurrId = get_id(Type, RightNewHistory)
+                  , ListenA = prepare_listen(LeftPrevId)
+                  , ListenB = prepare_listen(RightPrevId)
+
+                  , ChildSpec = prepare_child_spec(CurrId, {
+                        ydb_join, start_link, [
+                            [
+                                {left, {size, LeftSize}, {pulse, LeftPulse}}
+                              , {right, {size, RightSize}, {pulse, RightPulse}}
+                            ]
+                          , [{listen, [ListenA, ListenB]}]
+                        ]
+                    })
+
+                  , {ok, {
+                        CurrId
+                      , dict:update_counter(Type, 1, RightNewHistory)
+                      , [ChildSpec|RightNewResult]}
+                    }
+
+              ; {error, Reason} -> {error, Reason}
+            end
+
+      ; {error, Reason} -> {error, Reason}
+    end
+;
+
+make(
     {Type = file_output, Filename, Prev}
   , History
   , Result
