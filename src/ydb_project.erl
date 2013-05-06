@@ -65,7 +65,7 @@
   | {error, Error :: term()}
 .
 
-%% @doc Starts the input node in the supervisor hierarchy.
+%% @doc Starts the project node in the supervisor hierarchy.
 start_link(Args, Options) ->
     ydb_plan_node:start_link(?MODULE, Args, Options)
 .
@@ -80,7 +80,7 @@ start_link(Args, Options) ->
   | {error, Error :: term()}
 .
 
-%% @doc Starts the input node in the supervisor hierarchy with a
+%% @doc Starts the project node in the supervisor hierarchy with a
 %%      registered name.
 start_link(Name, Args, Options) ->
     ydb_plan_node:start_link(Name, ?MODULE, Args, Options)
@@ -94,7 +94,7 @@ start_link(Name, Args, Options) ->
 .
 
 %% @private
-%% @doc Initializes the input node's internal state.
+%% @doc Initializes the project node's internal state.
 init(Args) when is_list(Args) -> init(Args, #project{});
 
 init(_Args) -> {error, {badarg, not_options_list}}.
@@ -121,6 +121,15 @@ delegate(
     lists:foreach(fun(Tuple) ->
         check_tuple(Tuple, State) end, Tuples
     )
+  , {ok, State}
+;
+
+delegate(
+    _Request = {diffs, Tids}
+  , State = #project{}
+) ->
+    {ok, OutTid} = ydb_ets_utils:create_diff_table(project)
+  , check_diffs(Tids, State, OutTid)
   , {ok, State}
 ;
 
@@ -240,6 +249,76 @@ compute_new_schema(Schema, Columns, Include) ->
   , {Indexes, NewSchema}
 .
 
+%% ----------------------------------------------------------------- %%
+
+-spec project_tuple(
+    Tuple :: ydb_plan_node:ydb_tuple()
+  , State :: project()
+) -> NewTuple :: ydb_plan_node:ydb_tuple().
+
+%% @private
+%% @doc Projects the tuple down to the desired columns.
+project_tuple(
+    Tuple=#ydb_tuple{data=Data}
+  , _State=#project{indexes=Indexes}
+) ->
+    NewData = lists:map(fun(Index) ->
+        element(Index, Data) end, Indexes
+    )
+  , NewTuple = Tuple#ydb_tuple{data=list_to_tuple(NewData)}
+  , NewTuple
+.
+
+-spec check_tuple(
+    Tuple :: ydb_plan_node:ydb_tuple()
+  , State :: project()
+) -> ok.
+
+%% @private
+%% @doc Projects the tuple down to the desired columns, then passes it
+%%      along to the project node's listeners.
+check_tuple(Tuple, State) ->
+    NewTuple = project_tuple(Tuple, State)
+  , ydb_plan_node:notify(
+        erlang:self()
+      , {tuple, NewTuple}
+    )
+.
+
+-spec check_diffs(
+    Tids :: [ets:tid()]
+  , State :: project()
+  , OutTid :: ets:tid()
+) -> ok.
+
+%% @private
+%% @doc Projects all the tuples in a diff down to the desired columns,
+%%      then passes a new diff along to listeners.
+check_diffs(Tids, State, OutTid) ->
+    {Ins, Dels} = ydb_ets_utils:extract_diffs(Tids)
+    
+    % Do the inserts first.
+  , PlusDiffs = lists:map(fun(Tuple) ->
+        project_tuple(Tuple, State) end, Ins
+    )
+  , lists:foreach(fun(Tuple) ->
+        ydb_ets_utils:add_diffs(OutTid, '+', project, Tuple) end
+      , PlusDiffs
+    )
+    
+    % Then do the deletes.
+  , MinusDiffs = lists:map(fun(Tuple) ->
+        project_tuple(Tuple, State) end, Dels
+    )
+  , lists:foreach(fun(Tuple) ->
+        ydb_ets_utils:add_diffs(OutTid, '-', project, Tuple) end
+      , MinusDiffs
+    )
+.        
+    
+
+%% ----------------------------------------------------------------- %%
+
 -spec get_col(
     I :: integer()
   , Index :: integer()
@@ -249,6 +328,7 @@ compute_new_schema(Schema, Columns, Include) ->
 ) ->
     {ColName :: atom(), {I :: integer(), Type :: atom()}}.
 
+    
 %% @private
 %% @doc Returns the column at a particular index in the schema.
 %%      Renames the column if desired.
@@ -268,29 +348,6 @@ get_col(I, Index, _Columns, Schema, _Include=false) ->
   , {ColName, {I, Type}}
 .
 
--spec check_tuple(
-    Tuple :: ydb_plan_node:ydb_tuple()
-  , State :: project()
-) -> ok.
-
-%% @private
-%% @doc Projects the tuple down to the desired columns, then passes it
-%%      along to the project node's listeners.
-check_tuple(
-    Tuple=#ydb_tuple{data=Data}
-  , _State=#project{indexes=Indexes}
-) ->
-    NewData = lists:map(fun(Index) ->
-        element(Index, Data) end, Indexes
-    )
-  , NewTuple = Tuple#ydb_tuple{data=list_to_tuple(NewData)}
-  , ydb_plan_node:notify(
-        erlang:self()
-      , {tuple, NewTuple}
-    )
-.
-
-%% ----------------------------------------------------------------- %%
 
 -spec get_indexes(
     Include :: boolean()
