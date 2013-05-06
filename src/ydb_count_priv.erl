@@ -325,15 +325,15 @@ apply_log_mech(Value, Eps) ->
 %% -spec TODO
 
 %% @doc TODO
-%% TODO can't remember if Eps is included in the laplace paramter
+%% TODO I actually implemented this completely wrong. Fix!!!
 do_binary_advance(
     _Curr=#mech_state{time=T1}
   , _New=#mech_state{time=T, value=V}
   , _Lap=#mech_state{time=TL, value=VL}
-  , _Eps) ->
+  , Eps) ->
     {T2, V2} = {T - TL, V - VL}
-  , Interval = TL
-  , #mech_state{time=T2, value=add_binary_noise(V2, Interval, T2-T1)}
+  , LapArg = TL/Eps
+  , #mech_state{time=T2, value=add_binary_noise(V2, LapArg, T2-T1)}
 .
 
 %% ----------------------------------------------------------------- %%
