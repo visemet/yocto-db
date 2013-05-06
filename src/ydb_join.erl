@@ -108,6 +108,23 @@ init(Args) when is_list(Args) -> init(Args, #join{}).
     {ok, NewState :: join()}
 .
 
+%% @doc TODO
+delegate(
+    _Request = {diffs, Diffs}
+  , State = #join{}
+) ->
+    NewState = lists:foldl(
+        fun (Diff, S = #join{}) ->
+            S#join{}
+        end
+
+      , State
+      , Diffs
+    )
+
+  , {ok, NewState}
+;
+
 delegate(
     _Request = {get_listenees, Listenees}
   , State = #join{}
@@ -298,6 +315,19 @@ merge_tuples(
     )
 
   , #ydb_tuple{timestamp=Timestamp, data=Data}
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec get_owner(ets:tid(), pid(), pid()) -> 'left' | 'right'.
+
+%% @doc Returns the owner of the specified, i.e. `left' or `right'.
+get_owner(Diff, LeftPid, RightPid) ->
+    case ets:info(Diff, owner) of
+        Owner when is_pid(Owner), Owner =:= LeftPid -> left
+
+      ; Owner when is_pid(Owner), Owner =:= RightPid -> right
+    end
 .
 
 %% ----------------------------------------------------------------- %%
