@@ -111,11 +111,55 @@ init(Args) when is_list(Args) -> init(Args, #join{}).
 %% @doc TODO
 delegate(
     _Request = {diffs, Diffs}
-  , State = #join{}
+  , State = #join{left_pid = LeftPid, right_pid = RightPid}
 ) ->
     NewState = lists:foldl(
-        fun (Diff, S = #join{}) ->
-            S#join{}
+        fun (Diff, S = #join{parity = Parity, output_diffs = OutputDiffs}) ->
+            case get_owner(Diff, LeftPid, RightPid) of
+                left ->
+                    RightHistorySize = S#join.right_history_size
+                  , RightDiffs = S#join.right_diffs
+
+                  , OutputDiff = if
+                        Parity > 0 -> erlang:hd(OutputDiffs)
+
+                      ; Parity =< 0 ->
+                            {ok, Tid} = ydb_ets_utils:create_diff_table(
+                                ?MODULE
+                            )
+
+                          , Tid
+                    end
+
+                  , join_diffs(
+                        Diff
+                      , lists:sublist(RightDiffs, RightHistorySize)
+                      , OutputDiff
+                    )
+
+              ; right ->
+                    LeftHistorySize = S#join.left_history_size
+                  , LeftDiffs = S#join.left_diffs
+
+                  , OutputDiff = if
+                        Parity > 0 -> erlang:hd(OutputDiffs)
+
+                      ; Parity =< 0 ->
+                            {ok, Tid} = ydb_ets_utils:create_diff_table(
+                                ?MODULE
+                            )
+
+                          , Tid
+                    end
+
+                  , join_diffs(
+                        lists:sublist(LeftDiffs, LeftHistorySize)
+                      , Diff
+                      , OutputDiff
+                    )
+            end
+
+          , S#join{}
         end
 
       , State
@@ -245,6 +289,41 @@ init([Term | _Args], #join{}) ->
 .
 
 %% ----------------------------------------------------------------- %%
+
+-spec join_diffs(
+    LeftDiff :: ets:tid()
+  , RightDiffs :: [ets:tid()]
+  , OutputDiff :: ets:tid()
+) ->
+    ok
+; (
+    LeftDiffs :: [ets:tid()]
+  , RightDiff :: ets:tid()
+  , OutputDiff :: ets:tid()
+) ->
+    ok
+.
+
+%% @doc TODO
+join_diffs(LeftDiff, RightDiffs, OutputDiff) when is_list(RightDiffs) ->
+    lists:foreach(
+        fun (RightDiff) ->
+            cross_product(LeftDiff, RightDiff, OutputDiff)
+        end
+
+      , RightDiffs
+    )
+;
+
+join_diffs(LeftDiffs, RightDiff, OutputDiff) when is_list(LeftDiffs) ->
+    lists:foreach(
+        fun (LeftDiff) ->
+            cross_product(LeftDiff, RightDiff, OutputDiff)
+        end
+
+      , LeftDiffs
+    )
+.
 
 -spec cross_product(
     LeftDiff :: ets:tid()
