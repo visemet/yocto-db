@@ -290,6 +290,160 @@ init([Term | _Args], #join{}) ->
 
 %% ----------------------------------------------------------------- %%
 
+-spec received_left(State :: join()) -> NewState :: join().
+
+%% @doc TODO
+received_left(State) ->
+    State
+.
+
+-spec received_right(State :: join()) -> NewState :: join().
+
+%% @doc TODO
+received_right(State) ->
+    State
+.
+
+
+%% ----------------------------------------------------------------- %%
+
+%% @doc TODO
+left_backward_join(
+    {LeftDiff, RightDiffs, OutputDiffs}
+  , Offset
+  , HistorySize % Right
+) when
+    is_integer(Offset)
+  , is_integer(HistorySize) > 0
+  ->
+    {LeftIndex, _RightIndex} = get_index(Offset)
+
+  , Start = LeftIndex - HistorySize
+  , if
+        Start < 1 ->
+            join_diffs(
+                LeftDiff
+              , lists:sublist(RightDiffs, 1, LeftIndex)
+              , lists:nth(LeftIndex, OutputDiffs)
+            )
+
+      ; Start >= 1 ->
+            join_diffs(
+                LeftDiff
+              , lists:sublist(RightDiffs, Start, HistorySize + 1)
+              , lists:nth(LeftIndex, OutputDiffs)
+            )
+    end
+.
+
+%% @doc TODO
+right_backward_join(
+    {LeftDiffs, RightDiff, OutputDiffs}
+  , Offset
+  , HistorySize % Left
+) when
+    is_integer(Offset)
+  , is_integer(HistorySize) > 0
+  ->
+    {_LeftIndex, RightIndex} = get_index(Offset)
+
+  , Start = RightIndex - HistorySize
+  , if
+        Start < 1 ->
+            join_diffs(
+                lists:sublist(LeftDiffs, 1, RightIndex)
+              , RightDiff
+              , lists:nth(RightIndex, OutputDiffs)
+            )
+
+      ; Start >= 1 ->
+            join_diffs(
+                lists:sublist(LeftDiffs, Start, HistorySize + 1)
+              , RightDiff
+              , lists:nth(RightIndex, OutputDiffs)
+            )
+    end
+.
+
+%% ----------------------------------------------------------------- %%
+
+%% @doc TODO
+left_forward_join(
+    {LeftDiff, RightDiffs, OutputDiffs}
+  , Offset
+  , HistorySize % Left
+) when
+    is_integer(Offset)
+  , is_integer(HistorySize) > 0
+  ->
+    {LeftIndex, _RightIndex} = get_index(Offset)
+
+  , Start = LeftIndex + 1
+  , if
+        Start < erlang:length(RightDiffs) -> pass
+
+      ; Start >= erlang:length(RightDiffs) ->
+            lists:foreach(
+                fun ({RightDiff, OutputDiff}) ->
+                    cross_product(LeftDiff, RightDiff, OutputDiff)
+                end
+
+              , lists:sublist(
+                    lists:zip(RightDiffs, OutputDiffs)
+                  , Start
+                  , HistorySize
+                )
+            )
+    end
+.
+
+%% @doc TODO
+right_forward_join(
+    {LeftDiffs, RightDiff, OutputDiffs}
+  , Offset
+  , HistorySize % Right
+) when
+    is_integer(Offset)
+  , is_integer(HistorySize) > 0
+  ->
+    {_LeftIndex, RightIndex} = get_index(Offset)
+
+  , Start = RightIndex + 1
+  , if
+        Start < erlang:length(LeftDiffs) -> pass
+
+      ; Start >= erlang:length(LeftDiffs) ->
+            lists:foreach(
+                fun ({LeftDiff, OutputDiff}) ->
+                    cross_product(LeftDiff, RightDiff, OutputDiff)
+                end
+
+              , lists:sublist(
+                    lists:zip(LeftDiffs, OutputDiffs)
+                  , Start
+                  , HistorySize
+                )
+            )
+    end
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec get_index(Offset :: integer()) ->
+    {LeftIndex :: pos_integer(), RightIndex :: pos_integer()}
+.
+
+%% @doc TODO
+get_index(Offset) when is_integer(Offset), Offset < 0 ->
+    {-Offset + 1, 1}
+;
+
+get_index(Offset) when is_integer(Offset), Offset >= 0 ->
+    {1, Offset + 1}
+.
+
+%% ----------------------------------------------------------------- %%
+
 -spec join_diffs(
     LeftDiff :: ets:tid()
   , RightDiffs :: [ets:tid()]
