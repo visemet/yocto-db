@@ -8,8 +8,6 @@
 -export([start_link/2, start_link/3]).
 -export([init/1, delegate/2, delegate/3, compute_schema/2]).
 
--export([compute_new_schema/2, sort_tuples/2]).
-
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
 
@@ -253,14 +251,14 @@ compute_new_schema(Schema, Columns) ->
 %% @private
 %% @doc Reorders the columns in the tuple and then groups them. Outputs
 %%      them in a new diff in lexicographic order.
-check_diffs(Tids, State=#group{group_indexes=GroupIndexes}, OutTid) ->
+check_diffs(Tids, State, OutTid) ->
     {Ins, Dels} = ydb_ets_utils:extract_diffs(Tids)
   
     % Do the inserts first.
   , PlusDiffs = lists:map(fun(Tuple) ->
         reorder_tuple(Tuple, State) end, Ins
     )
-  , SortedPlusDiffs = sort_tuples(PlusDiffs, length(GroupIndexes))
+  , SortedPlusDiffs = lists:sort(PlusDiffs)
   , lists:foreach(fun(Tuple) ->
         ydb_ets_utils:add_diffs(OutTid, '+', group, Tuple) end
       , SortedPlusDiffs
@@ -270,7 +268,7 @@ check_diffs(Tids, State=#group{group_indexes=GroupIndexes}, OutTid) ->
   , MinusDiffs = lists:map(fun(Tuple) ->
         reorder_tuple(Tuple, State) end, Dels
     )
-  , SortedMinusDiffs = sort_tuples(MinusDiffs, length(GroupIndexes))
+  , SortedMinusDiffs = lists:sort(MinusDiffs)
   , lists:foreach(fun(Tuple) ->
         ydb_ets_utils:add_diffs(OutTid, '-', group, Tuple) end
       , SortedMinusDiffs
@@ -297,27 +295,6 @@ reorder_tuple(
   , NewTuple
 .
 
--spec sort_tuples(
-    Tuples :: [ydb_plan_node:ydb_tuple()]
-  , NumCols :: integer()
-) -> SortedTuples :: [ydb_plan_node:ydb_tuple()].
-
-%% @doc Sorts by the first <tt>NumCols</tt> columns.
-% TODO: Does not sort correctly
-sort_tuples(Tuples, NumCols) ->
-    lists:sort(fun(A, B) ->
-        io:format("first: ~w    second: ~w~n~n", [A, B]),
-        lists:foldl(fun(Index, Result) ->
-            Result and
-                (element(Index, A#ydb_tuple.data) =<
-                element(Index, B#ydb_tuple.data)) end
-          , true
-          , lists:seq(1, NumCols)
-        ) end
-      , Tuples
-    )
-.
-    
 %%% =============================================================== %%%
 %%%  private tests                                                  %%%
 %%% =============================================================== %%%
