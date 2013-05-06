@@ -108,6 +108,21 @@ init(Args) when is_list(Args) -> init(Args, #join{}).
     {ok, NewState :: join()}
 .
 
+delegate(
+    _Request = {get_listenees, Listenees}
+  , State = #join{}
+) ->
+    [LeftPid, RightPid] = lists:map(
+        fun (PidFun) when is_function(PidFun, 0) ->
+            PidFun()
+        end
+
+      , Listenees
+    )
+
+  , {ok, State#join{left_pid=LeftPid, right_pid=RightPid}}
+;
+
 delegate(_Request = {info, Message}, State = #join{}) ->
     delegate(Message, State)
 ;
