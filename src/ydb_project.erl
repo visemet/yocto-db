@@ -169,7 +169,7 @@ delegate(_Request, State, _Extras) ->
     InputSchemas :: [ydb_plan_node:ydb_schema()]
   , State :: project()
 ) ->
-    {ok, OutputSchema :: ydb_plan_node:ydb_schema()}
+    {ok, NewSchema :: ydb_plan_node:ydb_schema()}
   | {error, {badarg, InputSchemas :: [ydb_plan_node:ydb_schema()]}}
 .
 
@@ -235,13 +235,18 @@ init([Term | _Args], #project{}) ->
 %% @private
 %% @doc Computes the new schema.
 compute_new_schema(Schema, Columns, Include) ->
-    Indexes = get_indexes(Include, Columns, dict:from_list(Schema))
+    Indexes = ydb_predicate_utils:get_indexes(
+        Include
+      , Columns
+      , dict:from_list(Schema)
+    )
     % Loop through each index to select out only desired columns to 
     % create a new schema. Also does the renaming if necessary.
   , ColRange = lists:seq(1, length(Indexes))
   , NewSchema = lists:map(fun(I) ->
         Index = lists:nth(I, Indexes)
-      , get_col(I, Index, Columns, Schema, Include) end, ColRange
+      , ydb_predicate_utils:get_col(I, Index, Columns, Schema, Include) end
+      , ColRange
     )
   , {Indexes, NewSchema}
 .
@@ -313,82 +318,6 @@ check_diffs(Tids, State, OutTid) ->
     )
 .        
     
-
-%% ----------------------------------------------------------------- %%
-
--spec get_col(
-    I :: integer()
-  , Index :: integer()
-  , Columns :: [atom() | {atom(), atom()}]
-  , Schema :: ydb_plan_node:ydb_schema()
-  , Include :: boolean()
-) ->
-    {ColName :: atom(), {I :: integer(), Type :: atom()}}.
-
-    
-%% @private
-%% @doc Returns the column at a particular index in the schema.
-%%      Renames the column if desired.
-get_col(I, Index, Columns, Schema, _Include=true) ->
-    % Columns is the list of columns we do want, and their renames.
-    Column = lists:nth(I, Columns)
-  , {_OldName, {_Index, Type}} = lists:nth(Index, Schema)
-  , case Column of
-        {_OldName, NewName} -> {NewName, {I, Type}}
-      ; ColName -> {ColName, {I, Type}}
-    end
-;
-
-get_col(I, Index, _Columns, Schema, _Include=false) ->
-    % Index is the index of the column we DO want from Schema.
-    {ColName, {_Index, Type}} = lists:nth(Index, Schema)
-  , {ColName, {I, Type}}
-.
-
-
--spec get_indexes(
-    Include :: boolean()
-  , Columns :: [atom() | {atom(), atom()}]
-  , Schema :: dict())
-->
-    Indexes :: [integer()]
-.
-
-%% @private
-%% @doc Gets the list of indexes of the desired columns, based on a list of
-%%      column names that are supposed to be excluded or included.
-get_indexes(_Include=true, Columns, Schema) ->
-    Indexes = lists:map(fun(Col) ->
-        get_index(Col, Schema) end, Columns
-    )
-  , Indexes
-;
-
-get_indexes(_Include=false, Columns, Schema) ->
-    BadIndexes = get_indexes(true, Columns, Schema)
-  , Indexes = lists:seq(1, length(dict:to_list(Schema)))
-  , lists:subtract(Indexes, BadIndexes)
-.
-
--spec get_index(
-    ColName :: atom() | {atom(), atom()}
-  , Schema :: dict())
-->
-    integer() | error.
-
-%% @doc Gets the index of a particular column.
-get_index(_Col={OldName, _NewName}, Schema) ->
-    get_index(OldName, Schema)
-;
-
-get_index(ColName, Schema) ->
-    case dict:find(ColName, Schema) of
-        {ok, {Index, _Type}} ->
-            Index
-      ; error -> error
-    end
-.
-
 %%% =============================================================== %%%
 %%%  private tests                                                  %%%
 %%% =============================================================== %%%

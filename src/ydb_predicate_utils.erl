@@ -5,15 +5,15 @@
 %%      comparisons.
 -module(ydb_predicate_utils).
 
--export([is_satisfied/3]).
+-export([is_satisfied/3, get_col/3, get_col/5, get_indexes/3]).
 
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
 
 % Testing for private functions.
 -ifdef(TEST).
--export([check_satisfied/3, compare_types/3, compare/3, get_value/3]).
--export([is_same_type/2]).
+-export([check_satisfied/3, compare_types/3, compare/3]).
+-export([get_value/3, is_same_type/2]).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
@@ -183,6 +183,92 @@ get_value(_Tuple = #ydb_tuple{data=Data}, Schema, Col) ->
       % If the column cannot be found.
       ; error -> erlang:error(unknown_column)
     end
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec get_indexes(
+    Include :: boolean()
+  , Columns :: [atom() | {atom(), atom()}]
+  , Schema :: dict())
+->
+    Indexes :: [integer()]
+.
+
+%% @doc Gets the list of indexes of the desired columns, based on a list of
+%%      column names that are supposed to be excluded or included.
+get_indexes(_Include=true, Columns, Schema) ->
+    Indexes = lists:map(fun(Col) ->
+        get_index(Col, Schema) end, Columns
+    )
+  , Indexes
+;
+
+get_indexes(_Include=false, Columns, Schema) ->
+    BadIndexes = get_indexes(true, Columns, Schema)
+  , Indexes = lists:seq(1, length(dict:to_list(Schema)))
+  , lists:subtract(Indexes, BadIndexes)
+.
+
+-spec get_index(
+    ColName :: atom() | {atom(), atom()}
+  , Schema :: dict())
+->
+    integer() | error.
+
+%% @doc Gets the index of a particular column.
+get_index(_Col={OldName, _NewName}, Schema) ->
+    get_index(OldName, Schema)
+;
+
+get_index(ColName, Schema) ->
+    case dict:find(ColName, Schema) of
+        {ok, {Index, _Type}} ->
+            Index
+      ; error -> error
+    end
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec get_col(
+    I :: integer()
+  , Index :: integer()
+  , Schema :: ydb_plan_node:ydb_schema()
+) -> {ColName :: atom(), {I :: integer(), Type :: atom()}}.
+
+%% @doc Re-numbers a column.
+get_col(I, Index, Schema) ->
+    {Name, {_Index, Type}} = lists:nth(Index, Schema)
+  , {Name, {I, Type}}
+.
+
+-spec get_col(
+    I :: integer()
+  , Index :: integer()
+  , Columns :: [atom() | {atom(), atom()}]
+  , Schema :: ydb_plan_node:ydb_schema()
+  , Include :: boolean()
+) ->
+    {ColName :: atom(), {I :: integer(), Type :: atom()}}.
+
+%% @doc Returns the column at a particular index in the schema.
+%%      Renames the column if desired. Column will now have a new
+%%      column number of I.
+get_col(I, Index, Columns, Schema, _Include=true) ->
+    % Columns is the list of columns we do want, and their renames.
+    Column = lists:nth(I, Columns)
+  , {_OldName, {_Index, Type}} = lists:nth(Index, Schema)
+  , case Column of
+        {_OldName, NewName} -> {NewName, {I, Type}}
+      ; ColName -> {ColName, {I, Type}}
+    end
+;
+
+get_col(I, Index, _Columns, Schema, _Include=false) ->
+    % Index is the index of the column we DO want from Schema.
+    {ColName, {_Index, Type}} = lists:nth(Index, Schema)
+  , {ColName, {I, Type}}
 .
 
 %% ----------------------------------------------------------------- %%
