@@ -1,7 +1,7 @@
 %% @author Kalpana Suraesh <ksuraesh@caltech.edu>
 
-%% @doc Privacy-preserving module for the COUNT aggregate function. Tracks
-%%      the number of non-null values seen so far.
+%% @doc Privacy-preserving module for the COUNT aggregate function.
+%%      Tracks the number of non-null values seen so far.
 -module(ydb_count_priv).
 -behaviour(ydb_plan_node).
 
@@ -21,10 +21,13 @@
 %%%  internal records and types                                     %%%
 %%% =============================================================== %%%
 
--record(mech_state, {time :: integer(), value :: number()}).
+-record(mech_state, {
+    time :: integer()
+  , value=0 :: number()
+}).
 
 -type mech_state() :: #mech_state{
-    time :: integer()
+    time :: undefined | integer()
   , value :: number()
 }.
 %% Internal mechanism state.
@@ -49,7 +52,8 @@
 %% Internal count aggregate state.
 
 -type option() ::
-    {column, Column :: atom() | {ColName :: atom(), NewName :: atom()}}.
+    {column, Column :: atom() | {ColName :: atom(), NewName :: atom()}}
+  | {epsilon, Epsilon :: number()}.
 %% Options for the COUNT aggregate:
 %% <ul>
 %%   <li><code>{column, Column}</code> - The column name to track the
@@ -69,7 +73,7 @@
   | {error, Error :: term()}
 .
 
-%% @doc Starts the input node in the supervisor hierarchy.
+%% @doc Starts the aggregate node in the supervisor hierarchy.
 start_link(Args, Options) ->
     ydb_plan_node:start_link(?MODULE, Args, Options)
 .
@@ -99,7 +103,6 @@ start_link(Name, Args, Options) ->
 
 %% @private
 %% @doc Initializes the aggregate node's internal state.
-%% TODO add option to specify epsilon
 init(Args) when is_list(Args) -> init(Args, #aggr_count{});
 
 init(_Args) -> {error, {badarg, not_options_list}}.
@@ -113,17 +116,17 @@ init(_Args) -> {error, {badarg, not_options_list}}.
 delegate(
     _Request = {tuple, Tuple}
   , State = #aggr_count{
-        index=Index, curr_l=CurrL, curr_t = CurrT, curr_m = CurrM, epsilon = Eps}
+        index=Index, curr_l=CurrL, curr_t=CurrT, curr_m=CurrM, epsilon=Eps}
 ) ->
     {NewL, NewT, NewM} = check_tuple(Tuple, Index, CurrL, CurrT, CurrM, Eps)
-  , NewState = State#aggr_count{curr_l=NewL, curr_m=NewM, curr_t = NewT}
+  , NewState = State#aggr_count{curr_l=NewL, curr_m=NewM, curr_t=NewT}
   , {ok, NewState}
 ;
 
 delegate(
     _Request = {tuples, Tuples}
   , State = #aggr_count{
-        index=Index, curr_l=CurrL, curr_t = CurrT, curr_m = CurrM, epsilon = Eps}
+        index=Index, curr_l=CurrL, curr_t=CurrT, curr_m=CurrM, epsilon=Eps}
 ) ->
     {NewL, NewT, NewM} = lists:foldl(
         fun(Tuple, {L, T, M}) ->
@@ -132,7 +135,7 @@ delegate(
       , {CurrL, CurrT, CurrM}
       , Tuples
     )
-  , NewState = State#aggr_count{curr_l=NewL, curr_t = NewT, curr_m=NewM}
+  , NewState = State#aggr_count{curr_l=NewL, curr_t=NewT, curr_m=NewM}
   , {ok, NewState}
 ;
 
@@ -209,6 +212,10 @@ init([{column, Column} | Args], State = #aggr_count{}) ->
     init(Args, State#aggr_count{column=Column})
 ;
 
+init([{epsilon, Epsilon} | Args], State = #aggr_count{}) ->
+    init(Args, State#aggr_count{epsilon=Epsilon})
+;
+
 init([Term | _Args], #aggr_count{}) ->
     {error, {badarg, Term}}
 .
@@ -235,7 +242,7 @@ get_count(Lap, Bin) ->
   , CurrM :: mech_state()
   , Epsilon :: number()
 ) ->
-    {NewL :: mech_state(), NewM :: mech_state()}
+    {NewL :: mech_state(), NewT :: mech_state(), NewM :: mech_state()}
 .
 
 %% @private
@@ -289,16 +296,16 @@ check_tuple(
 %% @doc Returns value based on relative position of T2 and the current
 %%      logarithmic interval in consideration.
 find_case(NextPower, T2) when T2 < NextPower->
-    1 % T2 is in this interval
+    1 % T2 is in this interval.
 ;
 find_case(NextPower, T2) when T2 == NextPower->
-    2 % T2 at the border of this interval
+    2 % T2 at the border of this interval.
 ;
 find_case(NextPower, T2) when T2 < 2 * NextPower ->
-    3 % T2 is in next interval
+    3 % T2 is in next interval.
 ;
 find_case(_NextPower, _T2) ->
-    4 % T2 is past next interval
+    4 % T2 is past next interval.
 .
 
 %% ----------------------------------------------------------------- %%
@@ -310,8 +317,8 @@ find_case(_NextPower, _T2) ->
   , Eps :: number()
 ) -> {NewL :: mech_state(), NewT :: mech_state()}.
 
-%% @doc Adds as much noise as necessary and advances the value
-%%      to sigma (S).
+%% @doc Adds as much noise as necessary and advances the value to
+%%      \sigma(S).
 do_logarithmic_advance(
     _CurrL = #mech_state{time=T1, value=Beta}
   , CurrT = #mech_state{}
@@ -352,7 +359,7 @@ add_log_noise(Beta, Eps) ->
 %%      in this case adding noise as specified by simple counting
 %%      mechanism II.
 do_simple_count_II_advance(
-    _Curr = #mech_state{time=0, value=0} % change this to undefined
+    _Curr = #mech_state{time=0, value=0} % TODO change this to undefined
   , _New = #mech_state{time=TNew, value=VNew} % V is 1 or 0
   , _Tm = #mech_state{time=T} % the last power of 2 below TNew
   , Eps
@@ -377,7 +384,7 @@ do_simple_count_II_advance(
 
 -spec add_binary_noise(
     Value :: number()
-  , T :: integer()
+  , T :: number()
   , NumSteps :: integer()
 ) ->
     NoisyValue :: number()
@@ -401,6 +408,7 @@ add_binary_noise(Value, T, NumSteps) ->
 
 %% @doc Increments count if a non-null value is passed in.
 get_stream(null) -> 0;
+
 get_stream(_) -> 1.
 
 %%% =============================================================== %%%
@@ -416,6 +424,14 @@ init_test() ->
   , ?assertMatch(
         {error, {badarg, bad}}
       , init([bad], #aggr_count{})
+    )
+  , ?assertMatch(
+        {ok, #aggr_count{epsilon=0.01}}
+      , init([], #aggr_count{epsilon=0.01})
+    )
+  , ?assertMatch(
+        {ok, #aggr_count{column=[second], epsilon=0.02}}
+      , init([], #aggr_count{column=[second], epsilon=0.02})
     )
 .
 -endif.

@@ -1,12 +1,12 @@
-%% @author Angela Gong <anjoola@anjoola.com>
-%%       , Kalpana Suraesh <ksuraesh@caltech.edu>
+%% @author Angela Gong, Kalpana Suraesh
+%%         <anjoola@anjoola.com, ksuraesh@caltech.edu>
 
 %% @doc This module contains utility functions used for enabling
 %%      differentially-private queries.
 -module(ydb_private_utils).
 
+-export([get_next_power/1, get_prev_power/1, is_power_of_two/1]).
 -export([random_laplace/1]).
--export([is_power_of_two/1, get_next_power/1, get_prev_power/1]).
 
 
 %%% =============================================================== %%%
@@ -15,7 +15,7 @@
 
 -spec is_power_of_two(T :: integer()) -> IsPower :: boolean().
 
-%% @doc returns true if T is a power of 2
+%% @doc Returns true if T is a power of 2.
 is_power_of_two(T) ->
     T band (T - 1) == 0
 .
@@ -24,8 +24,9 @@ is_power_of_two(T) ->
 
 -spec get_next_power(T :: integer()) -> NextPower :: integer().
 
-%% @doc returns the smallest power of 2 greater than T
+%% @doc Returns the smallest power of 2 greater than T.
 get_next_power(0) -> 1;
+
 get_next_power(T) ->
     case is_power_of_two(T) of
         true -> 2 * T
@@ -37,7 +38,7 @@ get_next_power(T) ->
 
 -spec get_prev_power(T :: integer()) -> PrevPower :: integer().
 
-%% @doc returns the largest power of 2 less than or equal to T
+%% @doc Returns the largest power of 2 less than or equal to T.
 get_prev_power(T) ->
     get_next_power(T) bsr 1
 .
