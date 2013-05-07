@@ -63,19 +63,3 @@ new_tuple_test() ->
       , ydb_input_node_utils:new_tuple(19483, {1,3,4,3,blah})
     )
 .
-
-convert_time_test() ->
-    ?assertEqual(ydb_input_node_utils:convert_time({micro_sec, 49384}), 49384)
-  , ?assertEqual(ydb_input_node_utils:convert_time({milli_sec, 29}), 29000)
-  , ?assertEqual(ydb_input_node_utils:convert_time({sec, 2}), 2000000)
-  , ?assertEqual(ydb_input_node_utils:convert_time({min, 3}), 180000000)
-  , ?assertEqual(ydb_input_node_utils:convert_time({hour, 1}), 3600000000)
-  , ?assertEqual(
-      ydb_input_node_utils:convert_time({maxhhhhh, 2})
-    , {error, {badarg, maxhhhhh}}
-  )
-  , ?assertEqual(
-      ydb_input_node_utils:convert_time({sec, -32})
-    , {error, {badarg, -32}}
-  )
-.

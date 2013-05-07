@@ -1,3 +1,7 @@
+%% @author Max Hirschhorn <maxh@caltech.edu>
+
+%% @doc Utilities for the time-related operations.
+
 -module(ydb_time_utils).
 
 -export([get_curr_time/0, convert_time/1]).

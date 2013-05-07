@@ -12,13 +12,8 @@
 
 % Testing for private functions.
 -ifdef(TEST).
--export([convert_time/1, new_tuple/2]).
+-export([new_tuple/2]).
 -endif.
-
-% Number of seconds in a megasecond.
--define(MegaSecs_To_Secs, 1000000).
-% Number of microseconds in a second.
--define(Secs_To_MicroSecs, 1000000).
 
 %%% =============================================================== %%%
 %%%  API                                                            %%%
@@ -28,18 +23,12 @@
     Timestamp :: {Unit :: atom(), Name :: atom()}
   , Schema :: list()
   , Data :: list()
-) ->
-    Tuples :: list()
-.
+) -> Tuples :: list().
 
 %% @doc Makes a list of tuples of a given schema and set of data.
 make_tuples(Timestamp, Schema, Data) when is_list(Data) ->
-    lists:map(
-        fun (Datum) when is_tuple(Datum) ->
-            make_tuple(Timestamp, Schema, Datum)
-        end
-
-      , Data
+    lists:map(fun (Datum) when is_tuple(Datum) ->
+        make_tuple(Timestamp, Schema, Datum) end, Data
     )
 .
 
@@ -49,14 +38,11 @@ make_tuples(Timestamp, Schema, Data) when is_list(Data) ->
     Timestamp :: {Unit :: atom(), Name :: atom()}
   , Schema :: ydb_plan_node:ydb_schema()
   , Data :: tuple()
-) ->
-    Tuple :: ydb_tuple()
-.
+) -> Tuple :: ydb_plan_node:ydb_tuple().
 
 %% @doc Makes a new tuple with a timestamp if not given.
 make_tuple('$auto_timestamp', _Schema, Data) when is_tuple(Data) ->
-    Timestamp = convert_time(get_curr_time())
-
+    Timestamp = ydb_time_utils:get_curr_time()
   , new_tuple(Timestamp, Data)
 ;
 
@@ -67,15 +53,18 @@ make_tuple({Unit, Name}, Schema, Data)
   , is_tuple(Data)
   ->
     {Index, _Type} = dict:fetch(Name, dict:from_list(Schema))
-  , Timestamp = convert_time({Unit, erlang:element(Index, Data)})
-
+  , Timestamp = ydb_time_utils:convert_time(
+        {Unit, erlang:element(Index, Data)}
+    )
   , new_tuple(Timestamp, Data)
 .
 
 %% ----------------------------------------------------------------- %%
 
--spec push
-    (Tuple :: ydb_plan_node:ydb_tuple() | [ydb_plan_node:ydb_tuple()]) -> ok.
+-spec push(
+    Tuple :: ydb_plan_node:ydb_tuple()
+  | [ydb_plan_node:ydb_tuple()]
+) -> ok.
 
 %% @doc Pushes the tuple(s) to the listeners of the plan node. Defines
 %%      the way input streams are expected to serve data into the
@@ -102,7 +91,6 @@ push(Tuples) when is_list(Tuples) ->
     Tuple :: ydb_plan_node:ydb_tuple()
 .
 
-%% @private
 %% @doc Creates a new tuple.
 new_tuple(Timestamp, Data)
   when
@@ -113,61 +101,6 @@ new_tuple(Timestamp, Data)
         timestamp=Timestamp
       , data=Data
     }
-.
-
-%% ----------------------------------------------------------------- %%
-
--spec get_curr_time() -> {Unit :: atom(), TimeInMicroSecs :: integer()}.
-
-%% @private
-%% @doc Gets the current time in microseconds.
-get_curr_time() ->
-    {MegaSecs, Secs, MicroSecs} = erlang:now()
-
-  , {
-        micro_sec
-      , (MegaSecs * ?MegaSecs_To_Secs + Secs) * ?Secs_To_MicroSecs + MicroSecs
-    }
-.
-
-%% ----------------------------------------------------------------- %%
-
--spec convert_time({Unit :: atom(), TimeInUnit :: integer()}) ->
-    TimeInMicroSecs :: integer()
-  | {error, {badarg, Unit :: atom()}}
-.
-
-%% @private
-%% @doc Converts a time to microseconds.
-convert_time({_Unit, Time})
-  when
-    Time < 0
-  ->
-    {error, {badarg, Time}}
-;
-
-convert_time({micro_sec, MicroSecs}) ->
-    MicroSecs
-;
-
-convert_time({milli_sec, MilliSecs}) ->
-    convert_time({micro_sec, MilliSecs * 1000})
-;
-
-convert_time({sec, Secs}) ->
-    convert_time({milli_sec, Secs * 1000})
-;
-
-convert_time({min, Mins}) ->
-    convert_time({sec, Mins * 60})
-;
-
-convert_time({hour, Hours}) ->
-    convert_time({min, Hours * 60})
-;
-
-convert_time({Unit, _Time}) ->
-    {error, {badarg, Unit}}
 .
 
 %% ----------------------------------------------------------------- %%
