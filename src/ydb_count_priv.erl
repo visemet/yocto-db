@@ -10,6 +10,7 @@
 
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
+%-include("logging.hrl").
 
 % Testing for private functions.
 -ifdef(TEST).
@@ -32,6 +33,7 @@
     column :: atom() | {atom(), atom()}
   , index :: integer()
   , curr_l :: mech_state()
+  , curr_t :: mech_state()
   , curr_m = #mech_state{time=0, value=0} :: mech_state()
   , epsilon=0.01 :: number()
 }).
@@ -40,6 +42,7 @@
     column :: undefined | atom() | {atom(), atom()}
   , index :: undefined | integer()
   , curr_l :: undefined | mech_state()
+  , curr_t :: undefined | mech_state()
   , curr_m :: mech_state()
   , epsilon :: number()
 }.
@@ -110,26 +113,26 @@ init(_Args) -> {error, {badarg, not_options_list}}.
 delegate(
     _Request = {tuple, Tuple}
   , State = #aggr_count{
-        index=Index, curr_l=CurrL, curr_m = CurrM, epsilon = Eps}
+        index=Index, curr_l=CurrL, curr_t = CurrT, curr_m = CurrM, epsilon = Eps}
 ) ->
-    {NewL, NewM} = check_tuple(Tuple, Index, CurrL, CurrM, Eps)
-  , NewState = State#aggr_count{curr_l=NewL, curr_m=NewM}
+    {NewL, NewT, NewM} = check_tuple(Tuple, Index, CurrL, CurrT, CurrM, Eps)
+  , NewState = State#aggr_count{curr_l=NewL, curr_m=NewM, curr_t = NewT}
   , {ok, NewState}
 ;
 
 delegate(
     _Request = {tuples, Tuples}
   , State = #aggr_count{
-        index=Index, curr_l=CurrL, curr_m = CurrM, epsilon = Eps}
+        index=Index, curr_l=CurrL, curr_t = CurrT, curr_m = CurrM, epsilon = Eps}
 ) ->
-    {NewL, NewM} = lists:foldl(
-        fun(Tuple, {L, M}) ->
-            check_tuple(Tuple, Index, L, M, Eps)
+    {NewL, NewT, NewM} = lists:foldl(
+        fun(Tuple, {L, T, M}) ->
+            check_tuple(Tuple, Index, L, T, M, Eps)
         end
-      , {CurrL, CurrM}
+      , {CurrL, CurrT, CurrM}
       , Tuples
     )
-  , NewState = State#aggr_count{curr_l=NewL, curr_m=NewM}
+  , NewState = State#aggr_count{curr_l=NewL, curr_t = NewT, curr_m=NewM}
   , {ok, NewState}
 ;
 
@@ -228,6 +231,7 @@ get_count(Lap, Bin) ->
     Tuple :: ydb_plan_node:ydb_tuple()
   , Index :: integer()
   , CurrL :: undefined | mech_state()
+  , CurrT :: undefined | mech_state()
   , CurrM :: mech_state()
   , Epsilon :: number()
 ) ->
@@ -241,37 +245,46 @@ check_tuple(
     Tuple=#ydb_tuple{timestamp=Timestamp}
   , Index
   , undefined
+  , undefined
   , CurrM = #mech_state{}
   , Epsilon
 ) ->
     check_tuple(
-        Tuple, Index, #mech_state{time=Timestamp-1, value=0}, CurrM, Epsilon)
+        Tuple
+      , Index
+      , #mech_state{time=Timestamp-1, value=0}
+      , #mech_state{time=ydb_private_utils:get_prev_power(Timestamp-1), value=0}
+      , CurrM
+      , Epsilon)
 ;
 
 check_tuple(
     Tuple=#ydb_tuple{data=Data, timestamp=Timestamp}
   , Index
-  , CurrL = #mech_state{} % #ydb_tuple.data
+  , CurrL = #mech_state{}
+  , CurrT = #mech_state{}
   , CurrM = #mech_state{}
   , Epsilon
 ) ->
     RelevantData = element(Index, Data)
-  , NewCount = update_count(get_count(CurrL, CurrM), RelevantData)
-  , NewState = #mech_state{time=Timestamp, value=NewCount}
-  , NewL = do_laplace_advance(CurrL, NewState, Epsilon)
-  , NewM = do_binary_advance(CurrM, NewState, NewL, Epsilon)
-  , NoisyCount = get_count(NewL, NewM)
+  , Stream = get_stream(RelevantData)
+  , NewState = #mech_state{time=Timestamp, value=Stream}
+  , {NewT, NewL} = do_logarithmic_advance(CurrL, CurrT, NewState, Epsilon)
+  , NewM = do_simple_count_II_advance(CurrM, NewState, NewT, Epsilon)
+  , NoisyCount = get_count(NewT, NewM)
   , NewTuple = Tuple#ydb_tuple{data=list_to_tuple([NoisyCount])}
+  %, ?TRACE("we have ~nL = ~p, ~nT = ~p, ~nM = ~p~n", [NewL, NewT, NewM])
   , ydb_plan_node:notify(
         erlang:self()
       , {tuple, NewTuple}
     )
-  , {NewL, NewM}
+  , {NewL, NewT, NewM}
 .
 
 %% ----------------------------------------------------------------- %%
 
-%% -spec TODO
+-spec find_case(NextPower :: integer(), T2 :: integer()) ->
+    Case :: integer().
 
 %% @doc Returns value based on relative position of T2 and the current
 %%      logarithmic interval in consideration.
@@ -290,55 +303,85 @@ find_case(_NextPower, _T2) ->
 
 %% ----------------------------------------------------------------- %%
 
-%% -spec TODO
+-spec do_logarithmic_advance(
+    CurrL :: mech_state()
+  , CurrT :: mech_state()
+  , New :: mech_state()
+  , Eps :: number()
+) -> {NewL :: mech_state(), NewT :: mech_state()}.
 
-%% @doc TODO
-%% TODO: should this round the counts here ???
-%%       do that thing david talked about ???? (seems annoying though)
-%        round counts when we return the value (is what I like the best)
-do_laplace_advance(
-    Curr=#mech_state{time=T1, value=V1}
-  , New=#mech_state{time=T2, value=V2}
+%% @doc Adds as much noise as necessary and advances the value
+%%      to sigma (S).
+do_logarithmic_advance(
+    _CurrL = #mech_state{time=T1, value=Beta}
+  , CurrT = #mech_state{}
+  , New=#mech_state{time=T2, value=S}
   , Eps
 ) ->
     Gnp1 = ydb_private_utils:get_next_power(T1)
+  , NewT = #mech_state{time=Gnp1, value=add_log_noise(Beta, Eps)}
   , case find_case(Gnp1, T2) of
-        1 -> Curr
-      ; 2 -> #mech_state{time=Gnp1, value=apply_log_mech(V2, Eps)}
-      ; 3 -> #mech_state{time=Gnp1, value=apply_log_mech(V1, Eps)}
-      ; 4 -> do_laplace_advance(
-                #mech_state{time=Gnp1, value=apply_log_mech(V1, Eps)}, New, Eps)
+        1 -> {CurrT, #mech_state{time=T2, value=Beta+S}}
+      ; 2 -> {NewT, #mech_state{time=T2, value=NewT#mech_state.value + S}}
+      ; 3 -> {NewT, #mech_state{time=T2, value=NewT#mech_state.value + S}}
+      ; 4 -> do_logarithmic_advance(NewT, NewT, New, Eps)
     end
 .
 
 %% ----------------------------------------------------------------- %%
 
-%% -spec TODO
+-spec add_log_noise(Beta :: number(), Eps :: number()) ->
+    NoisyBeta :: number()
+.
 
-%% @doc Applies logarithmic mechanism to specified value.
-apply_log_mech(Value, Eps) ->
-    Value + ydb_private_utils:random_laplace(1/Eps)
+%% @doc Applies Lap(1/Eps) noise to specified value.
+add_log_noise(Beta, Eps) ->
+    Beta + ydb_private_utils:random_laplace(1/Eps)
 .
 
 %% ----------------------------------------------------------------- %%
 
-%% -spec TODO
+-spec do_simple_count_II_advance(
+    Curr :: mech_state()
+  , New :: mech_state()
+  , Tm :: mech_state()
+  , Eps :: number()
+) -> NewM :: mech_state().
 
-%% @doc TODO
-%% TODO I actually implemented this completely wrong. Fix!!!
-do_binary_advance(
-    _Curr=#mech_state{time=T1}
-  , _New=#mech_state{time=T, value=V}
-  , _Lap=#mech_state{time=TL, value=VL}
-  , Eps) ->
-    {T2, V2} = {T - TL, V - VL}
-  , LapArg = TL/Eps
-  , #mech_state{time=T2, value=add_binary_noise(V2, LapArg, T2-T1)}
+%% @doc Advances the state of the bounded mechanism M to time TNew,
+%%      in this case adding noise as specified by simple counting
+%%      mechanism II.
+do_simple_count_II_advance(
+    _Curr = #mech_state{time=0, value=0} % change this to undefined
+  , _New = #mech_state{time=TNew, value=VNew} % V is 1 or 0
+  , _Tm = #mech_state{time=T} % the last power of 2 below TNew
+  , Eps
+) ->
+    {T2, V2} = {TNew - T, VNew}
+  , LapArg = T/Eps
+  , #mech_state{time=T2, value = add_binary_noise(0, LapArg, 1) + V2}
+;
+do_simple_count_II_advance(
+    _Curr = #mech_state{time=T1, value=V1}
+  , _New = #mech_state{time=TNew, value=VNew} % V is 1 or 0
+  , _Tm = #mech_state{time=T} % the last power of 2 below TNew
+  , Eps
+) ->
+    %?TRACE("do adv with ~ncurr = ~p, ~nnew = ~p, ~nt = ~p~n", [Curr, New, Tm]),
+    {T2, V2} = {TNew - T, VNew}
+  , LapArg = T/Eps
+  , #mech_state{time=T2, value=add_binary_noise(V1, LapArg, T2 - T1) + V2}
 .
 
 %% ----------------------------------------------------------------- %%
 
-%% -spec TODO
+-spec add_binary_noise(
+    Value :: number()
+  , T :: integer()
+  , NumSteps :: integer()
+) ->
+    NoisyValue :: number()
+.
 
 %% @doc Adds binary noise of size Lap(1/T). If T = 0, adds Lap(1) noise.
 %% TODO is this the right solution for T = 0?
@@ -346,22 +389,19 @@ add_binary_noise(Value, _T, 0) ->
     Value
 ;
 add_binary_noise(Value, T, NumSteps) ->
+    %?TRACE("add bin noise with ~p, ~p, ~p~n", [Value, T, NumSteps]),
     NewValue = Value + ydb_private_utils:random_laplace(1/T)
   , add_binary_noise(NewValue, T, NumSteps - 1)
 .
 
 %% ----------------------------------------------------------------- %%
 
--spec update_count(Sum :: number(), NewNum :: number()) ->
-    NewCount :: number().
+-spec get_stream(NewNum :: number()) ->
+    NewCount :: 0 | 1.
 
 %% @doc Increments count if a non-null value is passed in.
-update_count(Count, null) ->
-    Count
-;
-update_count(Count, _) ->
-    Count + 1
-.
+get_stream(null) -> 0;
+get_stream(_) -> 1.
 
 %%% =============================================================== %%%
 %%%  private tests                                                  %%%
