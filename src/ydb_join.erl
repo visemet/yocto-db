@@ -277,10 +277,10 @@ received_left(LeftDiff, State = #join{
 
   , DiffsTuple = {LeftDiff, RightDiffs, NewOutputDiffs}
 
-    % Do forward join using right history size
+    % Do backward join using right history size
   , left_backward_join(DiffsTuple, Parity, RightHistorySize)
 
-    % Do backward join using left history size
+    % Do forward join using left history size
   , left_forward_join(DiffsTuple, Parity, LeftHistorySize)
 
   , NewLeftDiffs = case evict_left_diffs(
@@ -297,7 +297,11 @@ received_left(LeftDiff, State = #join{
         NumRightDiffs =:= 0 -> RightDiffs
 
       ; NumRightDiffs > 0 ->
-            case evict_right_diffs(Parity, RightHistorySize, NumLeftDiffs) of
+            case evict_right_diffs(
+                Parity
+              , RightHistorySize
+              , NumLeftDiffs + 1
+            ) of
                 true -> erlang:tl(RightDiffs)
 
               ; false -> RightDiffs
@@ -312,8 +316,8 @@ received_left(LeftDiff, State = #join{
   , NewParity = Parity + LeftParity + RightParity
 
   , if
-        (Parity > 0 andalso LeftParity =:= -1)
-        orelse (Parity < 0 andalso RightParity =:= 1) ->
+        % No more tuples to store in this output diff
+        NumLeftDiffs < NumRightDiffs + Parity ->
             ydb_plan_node:notify(
                 erlang:self()
               , {diffs, [erlang:hd(NewOutputDiffs)]}
@@ -326,7 +330,8 @@ received_left(LeftDiff, State = #join{
               , output_diffs=erlang:tl(NewOutputDiffs)
             }
 
-      ; true ->
+        % Do not send output diff as is newly created
+      ; NumLeftDiffs >= NumRightDiffs + Parity ->
             State#join{
                 parity=NewParity
               , left_diffs=NewLeftDiffs
@@ -363,10 +368,10 @@ received_right(RightDiff, State = #join{
 
   , DiffsTuple = {LeftDiffs, RightDiff, NewOutputDiffs}
 
-    % Do forward join using right history size
+    % Do backward join using right history size
   , right_backward_join(DiffsTuple, Parity, LeftHistorySize)
 
-    % Do backward join using left history size
+    % Do forward join using left history size
   , right_forward_join(DiffsTuple, Parity, RightHistorySize)
 
   , NewRightDiffs = case evict_right_diffs(
@@ -383,7 +388,11 @@ received_right(RightDiff, State = #join{
         NumLeftDiffs =:= 0 -> LeftDiffs
 
       ; NumLeftDiffs > 0 ->
-            case evict_left_diffs(Parity, LeftHistorySize, NumRightDiffs) of
+            case evict_left_diffs(
+                Parity
+              , LeftHistorySize
+              , NumRightDiffs + 1
+            ) of
                 true -> erlang:tl(LeftDiffs)
 
               ; false -> LeftDiffs
@@ -398,8 +407,8 @@ received_right(RightDiff, State = #join{
   , NewParity = Parity + LeftParity + RightParity
 
   , if
-        (Parity > 0 andalso LeftParity =:= -1)
-        orelse (Parity < 0 andalso RightParity =:= 1) ->
+        % No more tuples to store in this output diff
+        NumRightDiffs < NumLeftDiffs - Parity ->
             ydb_plan_node:notify(
                 erlang:self()
               , {diffs, [erlang:hd(NewOutputDiffs)]}
@@ -412,7 +421,8 @@ received_right(RightDiff, State = #join{
               , output_diffs=erlang:tl(NewOutputDiffs)
             }
 
-      ; true ->
+        % Do not send output diff as is newly created
+      ; NumRightDiffs >= NumLeftDiffs - Parity ->
             State#join{
                 parity=NewParity
               , left_diffs=NewLeftDiffs
@@ -434,7 +444,7 @@ received_right(RightDiff, State = #join{
 
 %% @doc TODO
 evict_left_diffs(Offset, HistorySize, NumRightDiffs) ->
-    NumRightDiffs + Offset >= 1 + HistorySize
+    NumRightDiffs + Offset >= HistorySize
 .
 
 -spec evict_right_diffs(
@@ -447,7 +457,7 @@ evict_left_diffs(Offset, HistorySize, NumRightDiffs) ->
 
 %% @doc TODO
 evict_right_diffs(Offset, HistorySize, NumLeftDiffs) ->
-    NumLeftDiffs - Offset >= 1 + HistorySize
+    NumLeftDiffs - Offset >= HistorySize
 .
 
 
@@ -470,9 +480,10 @@ left_backward_join(
             join_diffs(
                 LeftDiff
               , lists:sublist(RightDiffs, 1, LeftIndex)
-              , lists:nth(LeftIndex, OutputDiffs)
+              , erlang:hd(OutputDiffs)
             )
 
+        % TODO: can this case happen?
       ; Start >= 1 ->
             join_diffs(
                 LeftDiff
@@ -499,9 +510,10 @@ right_backward_join(
             join_diffs(
                 lists:sublist(LeftDiffs, 1, RightIndex)
               , RightDiff
-              , lists:nth(RightIndex, OutputDiffs)
+              , erlang:hd(OutputDiffs)
             )
 
+        % TODO: can this case happen?
       ; Start >= 1 ->
             join_diffs(
                 lists:sublist(LeftDiffs, Start, HistorySize + 1)
@@ -526,18 +538,18 @@ left_forward_join(
 
   , Start = LeftIndex + 1
   , if
-        Start < erlang:length(RightDiffs) -> pass
+        Start > erlang:length(RightDiffs) -> pass
 
-      ; Start >= erlang:length(RightDiffs) ->
+      ; Start =< erlang:length(RightDiffs) ->
             lists:foreach(
                 fun ({RightDiff, OutputDiff}) ->
                     cross_product(LeftDiff, RightDiff, OutputDiff)
                 end
 
               , lists:sublist(
-                    lists:zip(RightDiffs, OutputDiffs)
+                    padded_zip(Offset + 1, RightDiffs, OutputDiffs)
                   , Start
-                  , HistorySize
+                  , HistorySize - 1
                 )
             )
     end
@@ -552,22 +564,22 @@ right_forward_join(
     is_integer(Offset)
   , is_integer(HistorySize) > 0
   ->
-    {_LeftIndex, RightIndex} = get_index(Offset)
+    {LeftIndex, _RightIndex} = get_index(Offset)
 
-  , Start = RightIndex + 1
+  , Start = LeftIndex + 1
   , if
-        Start < erlang:length(LeftDiffs) -> pass
+        Start > erlang:length(LeftDiffs) -> pass
 
-      ; Start >= erlang:length(LeftDiffs) ->
+      ; Start =< erlang:length(LeftDiffs) ->
             lists:foreach(
                 fun ({LeftDiff, OutputDiff}) ->
                     cross_product(LeftDiff, RightDiff, OutputDiff)
                 end
 
               , lists:sublist(
-                    lists:zip(LeftDiffs, OutputDiffs)
+                    padded_zip(Offset + 1, LeftDiffs, OutputDiffs)
                   , Start
-                  , HistorySize
+                  , HistorySize - 1
                 )
             )
     end
@@ -706,6 +718,32 @@ get_owner(Diff, LeftPid, RightPid) ->
         Owner when is_pid(Owner), Owner =:= LeftPid -> left
 
       ; Owner when is_pid(Owner), Owner =:= RightPid -> right
+    end
+.
+
+%% ----------------------------------------------------------------- %%
+
+%% @doc Zips two lists of unequal length into one list of two-tuples,
+%%      where the first element of each tuple is taken from the first
+%%      list and the second element is taken from the corresponding
+%%      element in the second list. Note that the resulting list has
+%%      the same length as the smaller of the two lists, and that the
+%%      first `Pad' elements of the larger list are excluded.
+padded_zip(Pad, ListA, ListB)
+  when
+    is_integer(Pad)
+  , is_list(ListA)
+  , is_list(ListB)
+  ->
+    SizeA = erlang:length(ListA)
+  , SizeB = erlang:length(ListB)
+
+  , if
+        Pad < 0 -> lists:zip(ListA, lists:sublist(ListB, -Pad, SizeA))
+
+      ; Pad =:= 0 -> lists:zip(ListA, ListB)
+
+      ; Pad > 0 -> lists:zip(lists:sublist(ListA, Pad, SizeB), ListB)
     end
 .
 
