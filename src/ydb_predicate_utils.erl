@@ -5,7 +5,7 @@
 %%      comparisons.
 -module(ydb_predicate_utils).
 
--export([is_satisfied/3, get_col/3, get_col/5, get_indexes/3]).
+-export([get_col/3, get_col/5, get_indexes/3, is_satisfied/3]).
 
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
@@ -170,9 +170,7 @@ compare(_LValue, _Op, _RValue) ->
     Tuple :: ydb_plan_node:ydb_tuple()
   , Schema :: dict()
   , Col :: atom()
-) ->
-    Value :: term() | error
-.
+) -> Value :: term() | error.
 
 %% @doc Gets the value of the tuple at a particular column.
 get_value(_Tuple = #ydb_tuple{data=Data}, Schema, Col) ->
@@ -191,12 +189,11 @@ get_value(_Tuple = #ydb_tuple{data=Data}, Schema, Col) ->
     Include :: boolean()
   , Columns :: [atom() | {atom(), atom()}]
   , Schema :: dict())
-->
-    Indexes :: [integer()]
-.
+-> Indexes :: [integer()].
 
-%% @doc Gets the list of indexes of the desired columns, based on a list of
-%%      column names that are supposed to be excluded or included.
+%% @doc Gets the list of indexes of the desired columns, based on a
+%%      list of column names that are supposed to be excluded or
+%%      included.
 get_indexes(_Include=true, Columns, Schema) ->
     Indexes = lists:map(fun(Col) ->
         get_index(Col, Schema) end, Columns
@@ -213,8 +210,7 @@ get_indexes(_Include=false, Columns, Schema) ->
 -spec get_index(
     ColName :: atom() | {atom(), atom()}
   , Schema :: dict())
-->
-    integer() | error.
+-> integer() | error.
 
 %% @doc Gets the index of a particular column.
 get_index(_Col={OldName, _NewName}, Schema) ->
@@ -249,8 +245,7 @@ get_col(I, Index, Schema) ->
   , Columns :: [atom() | {atom(), atom()}]
   , Schema :: ydb_plan_node:ydb_schema()
   , Include :: boolean()
-) ->
-    {ColName :: atom(), {I :: integer(), Type :: atom()}}.
+) -> {ColName :: atom(), {I :: integer(), Type :: atom()}}.
 
 %% @doc Returns the column at a particular index in the schema.
 %%      Renames the column if desired. Column will now have a new
@@ -266,7 +261,7 @@ get_col(I, Index, Columns, Schema, _Include=true) ->
 ;
 
 get_col(I, Index, _Columns, Schema, _Include=false) ->
-    % Index is the index of the column we DO want from Schema.
+    % Index is the index of the column we do want from Schema.
     {ColName, {_Index, Type}} = lists:nth(Index, Schema)
   , {ColName, {I, Type}}
 .

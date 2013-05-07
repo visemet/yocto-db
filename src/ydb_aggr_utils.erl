@@ -19,8 +19,7 @@
 -spec get_col(
     ColName :: atom()
   , Schema :: dict())
-->
-    {Index :: integer(), Type :: atom()} | error.
+-> {Index :: integer(), Type :: atom()} | error.
 
 %% @doc Gets the index and type of a particular column.
 get_col(ColName, Schema) ->
@@ -37,9 +36,7 @@ get_col(ColName, Schema) ->
     Schema :: ydb_plan_node:ydb_schema()
   , Column :: atom() | {atom(), atom()}
   , Aggregate :: string()
-) ->
-    {Index :: integer(), NewSchema :: ydb_plan_node:ydb_schema()}
-.
+) -> {Index :: integer(), NewSchema :: ydb_plan_node:ydb_schema()}.
 
 %% @doc Computes the new schema for a particular aggregate.
 compute_new_schema(Schema, {OldCol, NewCol}, Aggregate) ->
