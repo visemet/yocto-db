@@ -375,7 +375,8 @@ handle_cast(
       , Wrapped
     ) of
         {ok, Schema} ->
-            {noreply, State#plan_node{schema=Schema}}
+            relegate(erlang:self(), {get_listenees, PlanNodes})
+          , {noreply, State#plan_node{schema=Schema}}
 
       ; {error, Reason} ->
             {stop, Reason, State}
