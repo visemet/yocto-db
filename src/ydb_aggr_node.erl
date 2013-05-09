@@ -314,3 +314,50 @@ evaluate_tuples(
 .
 
 %% ----------------------------------------------------------------- %%
+
+-spec get_partials(Synopsis :: ets:tid(), ResultName :: atom()) ->
+    Partials :: [term()]
+.
+
+%% @doc Returns the list of partial results stored in the synopsis.
+get_partials(Synopsis, ResultName) ->
+    lists:append(ets:match(Synopsis, {{ResultName, '_'}, '$1'}))
+.
+
+-spec add_partial(
+    Synopsis :: ets:tid()
+  , ResultName :: atom()
+  , Partial :: term()
+) ->
+    ok
+.
+
+%% @doc Inserts the partial result into the synopsis.
+add_partial(Synopsis, ResultName, Partial) ->
+    NextNum = case ets:last(Synopsis) of
+        '$end_of_table' -> 1
+
+      ; {ResultName, PrevNum} -> PrevNum + 1
+    end
+
+  , ets:insert(Synopsis, {{ResultName, NextNum}, Partial})
+  , ok
+.
+
+-spec remove_partial(
+    Synopsis :: ets:tid()
+  , ResultName :: atom()
+  , Partial :: term()
+) ->
+    ok
+.
+
+%% @doc Deletes the partial result from the synopsis.
+remove_partial(Synopsis, ResultName, Partial) ->
+    Num = erlang:hd(ets:match(Synopsis, {{ResultName, '$1'}, Partial}))
+
+  , ets:delete(Synopsis, {ResultName, Num})
+  , ok
+.
+
+%% ----------------------------------------------------------------- %%
