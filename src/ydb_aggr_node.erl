@@ -17,6 +17,9 @@
   , schema=[] :: ydb_schema()
   , columns=[] :: [atom()]
 
+  , result_name :: atom()
+  , result_type :: atom()
+
     % Evaluates an entry over which aggregates are taken
   , eval_fun :: 'undefined' | fun(([term()]) -> term())
     % Computes the aggregate on a single diff
@@ -24,7 +27,7 @@
 
     % Computes the aggregate over all diffs
   , aggr_fun :: 'undefined' | fun(([term()]) -> term())
-  , synopsis :: 'undefined' | ets:tid()
+  , synopsis=new_synopsis() :: ets:tid()
 }).
 
 -type aggr() :: #aggr{
@@ -34,11 +37,14 @@
   , schema :: ydb_schema()
   , columns :: [atom()]
 
+  , result_name :: atom()
+  , result_type :: atom()
+
   , eval_fun :: 'undefined' | fun(([term()]) -> term())
   , pr_fun :: 'undefined' | fun(([term()]) -> term())
 
   , aggr_fun :: 'undefined' | fun(([term()]) -> term())
-  , synopsis :: 'undefined' | ets:tid()
+  , synopsis :: ets:tid()
 }.
 %% Internal state of aggregate node.
 
@@ -46,6 +52,8 @@
     {history_size, HistorySize :: pos_integer() | 'infinity'}
   | {grouped, Grouped :: boolean()}
   | {columns, Columns :: [atom()]}
+  | {result_name, ResultName :: atom()}
+  | {result_type, ResultType :: atom()}
   | {eval_fun, EvalFun :: fun(([term()]) -> term())}
   | {pr_fun, PartialFun :: fun(([term()]) -> term())}
   | {aggr_fun, AggrFun :: fun(([term()]) -> term())}
@@ -168,10 +176,14 @@ delegate(_Request, State, _Extras) ->
 
 %% @doc Returns the output schema of the aggregate node based upon the
 %%      supplied input schemas. Expects a single schema.
-compute_schema([Schema], #aggr{}) ->
-    ydb_plan_node:relegate(erlang:self(), {get_schema, Schema})
+compute_schema([InputSchema], #aggr{
+    result_name = Name
+  , result_type = Type
+}) ->
+    ydb_plan_node:relegate(erlang:self(), {get_schema, InputSchema})
 
-  , {ok, Schema}
+  , OutputSchema = [{Name, {1, Type}}]
+  , {ok, OutputSchema}
 ;
 
 compute_schema(Schemas, #aggr{}) ->
@@ -205,6 +217,14 @@ init([{columns, Columns} | Args], State = #aggr{}) ->
     init(Args, State#aggr{columns=Columns})
 ;
 
+init([{result_name, ResultName} | Args], State = #aggr{}) ->
+    init(Args, State#aggr{result_name=ResultName})
+;
+
+init([{result_type, ResultType} | Args], State = #aggr{}) ->
+    init(Args, State#aggr{result_type=ResultType})
+;
+
 init([{eval_fun, EvalFun} | Args], State = #aggr{}) ->
     init(Args, State#aggr{eval_fun=EvalFun})
 ;
@@ -219,6 +239,16 @@ init([{aggr_fun, AggrFun} | Args], State = #aggr{}) ->
 
 init([Term | _Args], #aggr{}) ->
     {error, {badarg, Term}}
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec new_synopsis() -> Synopsis :: ets:tid().
+
+%% @doc Returns a new ETS table used for storing partial results.
+new_synopsis() ->
+    {ok, Tid} = ydb_ets_utils:create_table(synopsis)
+  , Tid
 .
 
 %% ----------------------------------------------------------------- %%
