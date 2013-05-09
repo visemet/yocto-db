@@ -7,10 +7,14 @@
 -export([start_link/2, start_link/3]).
 -export([init/1, delegate/2, delegate/3, compute_schema/2]).
 
+%% @headerfile "ydb_plan_node.hrl"
+-include("ydb_plan_node.hrl").
+
 -record(aggr, {
     history_size=1 :: pos_integer() | 'infinity'
   , grouped=false :: boolean()
 
+  , schema=[] :: ydb_schema()
   , columns=[] :: [atom()]
 
     % Evaluates an entry over which aggregates are taken
@@ -27,6 +31,7 @@
     history_size :: pos_integer()
   , grouped :: boolean()
 
+  , schema :: ydb_schema()
   , columns :: [atom()]
 
   , eval_fun :: 'undefined' | fun(([term()]) -> term())
@@ -110,6 +115,12 @@ delegate(
     {ok, State}
 ;
 
+delegate({get_schema, Schema}, State = #aggr{}) ->
+    NewState = State#aggr{schema=Schema}
+
+  , {ok, NewState}
+;
+
 delegate(_Request = {info, Message}, State = #aggr{}) ->
     delegate(Message, State)
 ;
@@ -144,7 +155,9 @@ delegate(_Request, State, _Extras) ->
 %% @doc Returns the output schema of the aggregate node based upon the
 %%      supplied input schemas. Expects a single schema.
 compute_schema([Schema], #aggr{}) ->
-    {ok, Schema}
+    ydb_plan_node:relegate(erlang:self(), {get_schema, Schema})
+
+  , {ok, Schema}
 ;
 
 compute_schema(Schemas, #aggr{}) ->
@@ -192,6 +205,31 @@ init([{aggr_fun, AggrFun} | Args], State = #aggr{}) ->
 
 init([Term | _Args], #aggr{}) ->
     {error, {badarg, Term}}
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec extract_values(
+    Tuple :: ydb_tuple()
+  , Columns :: [atom()]
+  , Schema :: ydb_schema()
+) ->
+    [term()]
+.
+
+%% @doc Extracts the values corresponding to the column names from the
+%%      tuple.
+extract_values(Tuple, Columns, Schema) ->
+    SchemaD = dict:from_list(Schema)
+
+  , lists:map(
+        fun (Column) when is_atom(Column) ->
+            {Index, _Type} = dict:fetch(Column, SchemaD)
+          , erlang:element(Index, Tuple)
+        end
+
+      , Columns
+    )
 .
 
 %% ----------------------------------------------------------------- %%
