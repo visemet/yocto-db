@@ -101,18 +101,32 @@ init(Args) when is_list(Args) -> init(Args, #aggr{}).
 .
 
 %% @doc TODO
-delegate(
-    _Request = {tuples, _Tuples}
-  , State = #aggr{}
-) ->
-    {ok, State}
+delegate({tuples, Tuples}, State = #aggr{
+    schema = Schema
+  , columns = Columns
+  , eval_fun = EvalFun
+}) when
+    is_list(Tuples)
+  ->
+    _Values = evaluate_tuples(Tuples, EvalFun, {Columns, Schema})
+
+  , {ok, State}
 ;
 
-delegate(
-    _Request = {diffs, _Diffs}
-  , State = #aggr{}
-) ->
-    {ok, State}
+delegate({diffs, Diffs}, State = #aggr{}) ->
+    NewState = lists:foldl(
+        fun (Diff, S0 = #aggr{}) ->
+            Tuples = get_inserts(Diff)
+          , {ok, S1} = delegate({tuples, Tuples}, S0)
+
+          , S1
+        end
+
+      , State
+      , Diffs
+    )
+
+  , {ok, NewState}
 ;
 
 delegate({get_schema, Schema}, State = #aggr{}) ->
@@ -209,6 +223,16 @@ init([Term | _Args], #aggr{}) ->
 
 %% ----------------------------------------------------------------- %%
 
+-spec get_inserts(Diff :: ets:tid()) -> Tuples :: [ydb_tuple()].
+
+%% @doc Returns a list of PLUS (`+') tuples from the diff.
+get_inserts(Diff) ->
+    {Plus, _Minus} = ydb_ets_utils:extract_diffs([Diff])
+  , Plus
+.
+
+%% ----------------------------------------------------------------- %%
+
 -spec extract_values(
     Tuple :: ydb_tuple()
   , Columns :: [atom()]
@@ -229,6 +253,33 @@ extract_values(Tuple, Columns, Schema) ->
         end
 
       , Columns
+    )
+.
+
+-spec evaluate_tuples(
+    Tuples :: [ydb_tuple]
+  , EvalFun :: fun(([term()]) -> term())
+  , {Columns :: [atom()], Schema :: ydb_schema()}
+) ->
+    [term()]
+.
+
+%% @doc Evaluates the tuples using the specified function.
+evaluate_tuples(
+    Tuples
+  , EvalFun
+  , {Columns, Schema}
+) when
+    is_list(Tuples)
+  , is_function(EvalFun, 1)
+  ->
+    lists:map(
+        fun (#ydb_tuple{data = Data}) ->
+            Values = extract_values(Data, Columns, Schema)
+          , EvalFun(Values)
+        end
+
+      , Tuples
     )
 .
 
