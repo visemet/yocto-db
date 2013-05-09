@@ -2,6 +2,46 @@
 
 %% @doc Privacy-preserving module for the COUNT aggregate function.
 %%      Tracks the number of non-null values seen so far.
+%%
+%%      Details for the mechanism are as follows:
+%%
+%%      Let L be the logarithmic mechanism, which is a time-unbounded
+%%      mechanism that outputs the noisy count L(t, \epsilon). It adds
+%%      noise to the count at every timestep that is a power of 2. This
+%%      mechanism guarantees \epsilon-differential privacy when used
+%%      alone.
+%%
+%%      Let M be any time-bounded mechanism, which outputs the noisy
+%%      count M(t, \epsilon). It adds noise to the count as specified,
+%%      and guarantees \epsilon-differential privacy when used alone.
+%%
+%%      The hybrid mechanism, which is used in this module, combines L
+%%      and M by using L to track the noisy count at powers of 2, and
+%%      M to track the count in the intervals between the powers of 2.
+%%
+%%      Let t' be the largest power of two that is less than t, and let
+%%      \tau be t' - t. (So if t = 10, t' = 8 and \tau = 2). The count
+%%      C(t) at timestep t is given by C(t) = L(t') + M(\tau). At every
+%%      timestep that is a power of 2, M is reset to 0.
+%%
+%%      Accordingly, This implementation keeps track of three mechanism
+%%      state values:
+%%          currL = {t, L(t)}
+%%          currM = {\tau, M(\tau)}
+%%          currT = {t', L(t')}
+%%
+%%      Finally, since all the papers assume that the stream sigma is a
+%%      stream of 0's or 1's for each timestep, but realistically, we
+%%      only receive tuples for the 1's in the stream, the
+%%      implementation has to take into account the fact that the
+%%      timestamp is not incremented by 1 each time.
+%%
+%%      So, when a tuple is received, check_tuple/2 is called.
+%%      check_tuple/2 fastforwards the mechanism state variables from
+%%      the previous time t0 to the current time t, essentially adding
+%%      noise as many times as necessary between t0 and t. It then
+%%      outputs a tuple with the new noisy count, and returns the
+%%      modified state.
 -module(ydb_count_priv).
 -behaviour(ydb_plan_node).
 
@@ -119,9 +159,7 @@ delegate(
     _Request = {tuple, Tuple}
   , State = #aggr_count{}
 ) ->
-  %  {NewL, NewT, NewM} = check_tuple(Tuple, Index, CurrL, CurrT, CurrM, Eps)
-  %, NewState = State#aggr_count{curr_l=NewL, curr_m=NewM, curr_t=NewT}
-    NewState = check_tuple_2(Tuple, State)
+    NewState = check_tuple(Tuple, State)
   , {ok, NewState}
 ;
 
@@ -131,7 +169,7 @@ delegate(
 ) ->
     NewState = lists:foldl(
         fun(Tuple, S) ->
-            check_tuple_2(Tuple, S)
+            check_tuple(Tuple, S)
         end
       , State
       , Tuples
@@ -235,7 +273,7 @@ get_count(Lap, Bin) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec check_tuple_2(
+-spec check_tuple(
     Tuple :: ydb_plan_node:ydb_tuple()
   , State :: aggr_count()
 ) -> NewState :: aggr_count().
@@ -243,7 +281,7 @@ get_count(Lap, Bin) ->
 %% @private
 %% @doc Selects only the necessary column required for tracking the
 %%      count and updates the current count if necessary.
-check_tuple_2(
+check_tuple(
     Tuple=#ydb_tuple{timestamp=Timestamp}
   , State = #aggr_count{
         curr_l=undefined
@@ -253,10 +291,11 @@ check_tuple_2(
     RelTime = get_relative_time(undefined, Timestamp)
   , NewL = #mech_state{time=RelTime, value=0}
   , NewT = #mech_state{time=ydb_private_utils:get_prev_power(RelTime), value=0}
-  , check_tuple_2(Tuple, State#aggr_count{curr_l=NewL, curr_t=NewT, init_time=Timestamp-1})
+  , check_tuple(Tuple,
+        State#aggr_count{curr_l=NewL, curr_t=NewT, init_time=Timestamp-1})
 ;
 
-check_tuple_2(
+check_tuple(
     Tuple = #ydb_tuple{timestamp=Timestamp, data=Data}
   , State = #aggr_count{
         index=Index
@@ -304,8 +343,6 @@ get_relative_time(InitTime, Time) -> Time - InitTime.
 %% @doc Returns value based on relative position of T2 and the current
 %%      logarithmic interval in consideration. This tells us how to
 %%      update the L and T mech_states.
-%%      Note that cases 2 and 3 seem identical now, and can probably be
-%%      combined later (after confirming that they are indeed identical)
 find_case(NextPower, T2) when T2 < NextPower->
     1 % T2 is in this interval.
 ;
@@ -329,20 +366,20 @@ find_case(_NextPower, _T2) ->
 ) -> {NewL :: mech_state(), NewT :: mech_state()}.
 
 %% @doc Adds as much noise as necessary and advances the value to
-%%      \sigma (S).
+%%      incorporate \sigma.
 do_logarithmic_advance(
     _CurrL = #mech_state{time=T1, value=Beta}
   , CurrT = #mech_state{}
-  , New=#mech_state{time=T2, value=S}
+  , New=#mech_state{time=T2, value=Sigma}
   , Eps
 ) ->
     Gnp1 = ydb_private_utils:get_next_power(T1)
   , NewT = #mech_state{time=Gnp1, value=add_log_noise(Beta, Eps)}
   , case find_case(Gnp1, T2) of
-        1 -> {CurrT, #mech_state{time=T2, value=Beta+S}}
-      ; 2 -> {NewT#mech_state{value=NewT#mech_state.value + S}
-                , #mech_state{time=T2, value=NewT#mech_state.value + S}}
-      ; 3 -> {NewT, #mech_state{time=T2, value=NewT#mech_state.value + S}}
+        1 -> {CurrT, #mech_state{time=T2, value=Beta+Sigma}}
+      ; 2 -> {NewT#mech_state{value=NewT#mech_state.value + Sigma}
+                , #mech_state{time=T2, value=NewT#mech_state.value + Sigma}}
+      ; 3 -> {NewT, #mech_state{time=T2, value=NewT#mech_state.value + Sigma}}
       ; 4 -> do_logarithmic_advance(NewT, NewT, New, Eps)
     end
 .
