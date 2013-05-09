@@ -11,6 +11,8 @@
   , remove_listener/2, relegate/2, relegate/3
 ]).
 
+-export([send_tuples/2, send_diffs/2]).
+
 -export([
     init/1, handle_call/3, handle_cast/2, handle_info/2
   , terminate/2, code_change/3
@@ -164,6 +166,24 @@ relegate(PlanNode, Message, Extras)
   , is_list(Extras)
   ->
     gen_server:cast(PlanNode, {relegate, Message, Extras})
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec send_tuples(PlanNode :: pid(), Tuples :: [ydb_tuple()]) -> ok.
+
+%% @doc Sends the listeners of the plan node with a
+%%      `{tuples, Tuples}' message.
+send_tuples(PlanNode, Tuples) ->
+    notify(PlanNode, {'$gen_cast', {relegate, {tuples, Tuples}}})
+.
+
+-spec send_diffs(PlanNode :: pid(), Diffs :: [ets:tid()]) -> ok.
+
+%% @doc Sends the listeners of the plan node with a
+%%      `{diffs, Diffs}' message.
+send_diffs(PlanNode, Diffs) ->
+    notify(PlanNode, {'$gen_cast', {relegate, {diffs, Diffs}}})
 .
 
 %% ----------------------------------------------------------------- %%
