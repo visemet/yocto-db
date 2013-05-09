@@ -253,6 +253,47 @@ new_synopsis() ->
 
 %% ----------------------------------------------------------------- %%
 
+-spec do_update(Tuples :: [ydb_tuple()], State :: aggr()) ->
+    {PrevAggr :: term(), CurrAggr :: term()}
+.
+
+%% @doc Performs the update to the synopsis based on the received list
+%%      of tuples. Returns the previous and current aggregate.
+do_update(Tuples, #aggr{
+    history_size = HistorySize
+  , schema = Schema
+  , columns = Columns
+  , result_name = ResultName
+  , eval_fun = EvalFun
+  , pr_fun = PartialFun
+  , aggr_fun = AggrFun
+  , synopsis = Synopsis
+}) when
+    is_list(Tuples)
+  ->
+    Partials = get_partials(Synopsis, ResultName)
+
+  , NewPartial = PartialFun(
+        evaluate_tuples(Tuples, EvalFun, {Columns, Schema})
+    )
+  , add_partial(Synopsis, ResultName, NewPartial)
+
+  , NewPartials = case should_evict(Partials, HistorySize) of
+        true ->
+            remove_partial(Synopsis, ResultName, erlang:hd(Partials))
+          , lists:append(erlang:tl(Partials), [NewPartial])
+
+      ; false -> lists:append(Partials, [NewPartial])
+    end
+
+  , PrevAggr = AggrFun(Partials)
+  , CurrAggr = AggrFun(NewPartials)
+
+  , {PrevAggr, CurrAggr}
+.
+
+%% ----------------------------------------------------------------- %%
+
 -spec get_inserts(Diff :: ets:tid()) -> Tuples :: [ydb_tuple()].
 
 %% @doc Returns a list of PLUS (`+') tuples from the diff.
@@ -312,6 +353,30 @@ evaluate_tuples(
       , Tuples
     )
 .
+
+%% ----------------------------------------------------------------- %%
+
+-spec should_evict(
+    Partials :: [term()]
+  , HistorySize :: pos_integer() | 'infinity'
+) ->
+    boolean()
+.
+
+%% @doc Returns `true' if the first partial result is no longer
+%%      necessary, and `false' otherwise.
+should_evict(Partials, HistorySize) ->
+    NumPartials = erlang:length(Partials)
+
+  , if
+        HistorySize =:= 'infinity' -> false
+
+      ; NumPartials < HistorySize -> false
+
+      ; NumPartials >= HistorySize -> true
+    end
+.
+
 
 %% ----------------------------------------------------------------- %%
 
