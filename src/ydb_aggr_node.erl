@@ -11,7 +11,15 @@
     history_size=1 :: pos_integer() | 'infinity'
   , grouped=false :: boolean()
 
-  , aggr_fun :: 'undefined' | fun()
+  , columns=[] :: [atom()]
+
+    % Evaluates an entry over which aggregates are taken
+  , eval_fun :: 'undefined' | fun(([term()]) -> term())
+    % Computes the aggregate on a single diff
+  , pr_fun :: 'undefined' | fun(([term()]) -> term())
+
+    % Computes the aggregate over all diffs
+  , aggr_fun :: 'undefined' | fun(([term()]) -> term())
   , synopsis :: 'undefined' | ets:tid()
 }).
 
@@ -19,7 +27,12 @@
     history_size :: pos_integer()
   , grouped :: boolean()
 
-  , aggr_fun :: 'undefined' | fun()
+  , columns :: [atom()]
+
+  , eval_fun :: 'undefined' | fun(([term()]) -> term())
+  , pr_fun :: 'undefined' | fun(([term()]) -> term())
+
+  , aggr_fun :: 'undefined' | fun(([term()]) -> term())
   , synopsis :: 'undefined' | ets:tid()
 }.
 %% Internal state of aggregate node.
@@ -27,6 +40,10 @@
 -type option() ::
     {history_size, HistorySize :: pos_integer() | 'infinity'}
   | {grouped, Grouped :: boolean()}
+  | {columns, Columns :: [atom()]}
+  | {eval_fun, EvalFun :: fun(([term()]) -> term())}
+  | {pr_fun, PartialFun :: fun(([term()]) -> term())}
+  | {aggr_fun, AggrFun :: fun(([term()]) -> term())}
 .
 %% TODO
 
@@ -138,10 +155,39 @@ compute_schema(Schemas, #aggr{}) ->
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
+-spec init([option()], State :: aggr()) ->
+    {ok, NewState :: aggr()}
+  | {error, Reason :: term()}
+.
+
 %% @private
-%% @doc Initializes internal state of the aggregate node.
+%% @doc Initializes the internal state of the aggregate node.
 init([], State = #aggr{}) ->
     {ok, State}
+;
+
+init([{history_size, HistorySize} | Args], State = #aggr{}) ->
+    init(Args, State#aggr{history_size=HistorySize})
+;
+
+init([{grouped, Grouped} | Args], State = #aggr{}) ->
+    init(Args, State#aggr{grouped=Grouped})
+;
+
+init([{columns, Columns} | Args], State = #aggr{}) ->
+    init(Args, State#aggr{columns=Columns})
+;
+
+init([{eval_fun, EvalFun} | Args], State = #aggr{}) ->
+    init(Args, State#aggr{eval_fun=EvalFun})
+;
+
+init([{pr_fun, PartialFun} | Args], State = #aggr{}) ->
+    init(Args, State#aggr{pr_fun=PartialFun})
+;
+
+init([{aggr_fun, AggrFun} | Args], State = #aggr{}) ->
+    init(Args, State#aggr{aggr_fun=AggrFun})
 ;
 
 init([Term | _Args], #aggr{}) ->
