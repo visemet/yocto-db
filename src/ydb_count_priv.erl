@@ -1,47 +1,14 @@
 %% @author Kalpana Suraesh <ksuraesh@caltech.edu>
 
 %% @doc Privacy-preserving module for the COUNT aggregate function.
-%%      Tracks the number of non-null values seen so far.
-%%
-%%      Details for the mechanism are as follows:
-%%
-%%      Let L be the logarithmic mechanism, which is a time-unbounded
-%%      mechanism that outputs the noisy count L(t, \epsilon). It adds
-%%      noise to the count at every timestep that is a power of 2. This
-%%      mechanism guarantees \epsilon-differential privacy when used
-%%      alone.
-%%
-%%      Let M be any time-bounded mechanism, which outputs the noisy
-%%      count M(t, \epsilon). It adds noise to the count as specified,
-%%      and guarantees \epsilon-differential privacy when used alone.
-%%
-%%      The hybrid mechanism, which is used in this module, combines L
-%%      and M by using L to track the noisy count at powers of 2, and
-%%      M to track the count in the intervals between the powers of 2.
-%%
-%%      Let t' be the largest power of two that is less than t, and let
-%%      \tau be t' - t. (So if t = 10, t' = 8 and \tau = 2). The count
-%%      C(t) at timestep t is given by C(t) = L(t') + M(\tau). At every
-%%      timestep that is a power of 2, M is reset to 0.
-%%
-%%      Accordingly, This implementation keeps track of three mechanism
-%%      state values:
-%%          currL = {t, L(t)}
-%%          currM = {\tau, M(\tau)}
-%%          currT = {t', L(t')}
-%%
-%%      Finally, since all the papers assume that the stream sigma is a
-%%      stream of 0's or 1's for each timestep, but realistically, we
-%%      only receive tuples for the 1's in the stream, the
-%%      implementation has to take into account the fact that the
-%%      timestamp is not incremented by 1 each time.
-%%
-%%      So, when a tuple is received, check_tuple/2 is called.
-%%      check_tuple/2 fastforwards the mechanism state variables from
-%%      the previous time t0 to the current time t, essentially adding
-%%      noise as many times as necessary between t0 and t. It then
-%%      outputs a tuple with the new noisy count, and returns the
-%%      modified state.
+%%      Tracks the number of non-null values seen so far. Implements
+%%      the Hybrid Mechanism outlined in 'Private and Continual
+%%      Release of Statistics' (Chan, Shi, Song). The bounded mechanism
+%%      used to initialize the Hybrid Mechanism can be either the
+%%      Binary Mechanism or Simple Counting Mechanism II (both also from
+%%      the same paper). Note that the Binary Mechanism is not
+%%      pan-private, while Simple Counting Mechanism II is. Most of
+%%      the logic is in ydb_private_utils.
 -module(ydb_count_priv).
 -behaviour(ydb_plan_node).
 
@@ -50,7 +17,6 @@
 
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
-%-include("logging.hrl").
 
 % Testing for private functions.
 -ifdef(TEST).
@@ -61,43 +27,34 @@
 %%%  internal records and types                                     %%%
 %%% =============================================================== %%%
 
--record(mech_state, {
-    time :: integer()
-  , value=0 :: number()
-}).
-
--type mech_state() :: #mech_state{
-    time :: undefined | integer()
-  , value :: number()
-}.
-%% Internal mechanism state.
-
 -record(aggr_count, {
     column :: atom() | {atom(), atom()}
   , index :: integer()
-  , curr_l :: mech_state()
-  , curr_t :: mech_state()
-  , curr_m = #mech_state{time=0, value=0} :: mech_state()
+  , curr_t=0 :: integer() % little t
+  , curr_l=0 :: number() % L(t)
+  , curr_lt=0 :: number() % L(T)
+  , curr_m :: {number()} | {number(), dict()} % M(\tau)
   , epsilon=0.01 :: number()
   , init_time :: integer()
-  , freqs=dict:new() :: dict()
+  , bounded_mech=binary :: atom() % binary | simple_count_II
 }).
 
 -type aggr_count() :: #aggr_count{
     column :: undefined | atom() | {atom(), atom()}
   , index :: undefined | integer()
-  , curr_l :: undefined | mech_state()
-  , curr_t :: undefined | mech_state()
-  , curr_m :: mech_state()
+  , curr_t :: integer()
+  , curr_l :: number()
+  , curr_lt :: number()
+  , curr_m :: undefined | {number()} | {number(), dict()}
   , epsilon :: number()
   , init_time :: undefined | integer()
-  , freqs :: undefined | dict()
+  , bounded_mech :: atom()
 }.
 %% Internal count aggregate state.
 
 -type option() ::
     {column, Column :: atom() | {ColName :: atom(), NewName :: atom()}}
-  | {epsilon, Epsilon :: number()}.
+  | {epsilon, Epsilon :: number()} | {bounded_mech, Mech :: atom()}.
 %% Options for the COUNT aggregate:
 %% <ul>
 %%   <li><code>{column, Column}</code> - The column name to track the
@@ -246,7 +203,7 @@ compute_schema(Schemas, #aggr_count{}) ->
 %% @doc Parses initializing arguments to set up the internal state of
 %%      the count aggregate node.
 init([], State = #aggr_count{}) ->
-    {ok, State}
+    post_init(State)
 ;
 
 init([{column, Column} | Args], State = #aggr_count{}) ->
@@ -257,21 +214,21 @@ init([{epsilon, Epsilon} | Args], State = #aggr_count{}) ->
     init(Args, State#aggr_count{epsilon=Epsilon})
 ;
 
+init([{bounded_mech, Mech} | Args], State = #aggr_count{}) ->
+    init(Args, State#aggr_count{bounded_mech=Mech})
+;
+
 init([Term | _Args], #aggr_count{}) ->
     {error, {badarg, Term}}
 .
 
-%% ----------------------------------------------------------------- %%
-
--spec get_count(Lap :: mech_state(), Bin :: mech_state()) ->
-    integer()
+post_init(State = #aggr_count{bounded_mech=BoundedMech}) ->
+    case BoundedMech of
+        binary -> {ok, State#aggr_count{curr_m={0, dict:new()}}}
+      ; simple_count_II -> {ok, State#aggr_count{curr_m={0}}}
+    end
 .
 
-%% @doc Combines the state of the Laplace and Binary mechanism
-%%      to obtain the current count (as an integer).
-get_count(Lap, Bin) ->
-    round(Lap#mech_state.value) + round(Bin#mech_state.value)
-.
 
 %% ----------------------------------------------------------------- %%
 
@@ -285,16 +242,9 @@ get_count(Lap, Bin) ->
 %%      count and updates the current count if necessary.
 check_tuple(
     Tuple=#ydb_tuple{timestamp=Timestamp}
-  , State = #aggr_count{
-        curr_l=undefined
-      , curr_t=undefined
-      , init_time=undefined}
+  , State = #aggr_count{init_time=undefined}
 ) ->
-    RelTime = get_relative_time(undefined, Timestamp)
-  , NewL = #mech_state{time=RelTime, value=0}
-  , NewT = #mech_state{time=ydb_private_utils:get_prev_power(RelTime), value=0}
-  , check_tuple(Tuple,
-        State#aggr_count{curr_l=NewL, curr_t=NewT, init_time=Timestamp-1})
+    check_tuple(Tuple, State#aggr_count{init_time=Timestamp-1})
 ;
 
 check_tuple(
@@ -302,54 +252,38 @@ check_tuple(
   , State = #aggr_count{
         index=Index
       , curr_l=CurrL
-      , curr_t=CurrT
-      , curr_m=CurrM
+      , curr_t=CurrTime
+      , curr_m=CurrMState
+      , curr_lt = CurrLT
       , epsilon=Epsilon
       , init_time=InitTime
-      , freqs = Freqs}
+      , bounded_mech=BoundedMech}
 ) ->
     RelevantData = element(Index, Data)
-  , RelTimestamp = get_relative_time(InitTime, Timestamp)
-  , Stream = get_stream(RelevantData)
-  , NewState = #mech_state{time=RelTimestamp, value=Stream}
-  , {NewT, NewL} = ydb_private_utils:do_logarithmic_advance(
-        CurrL, CurrT, NewState, Epsilon)
-  , {NewM, NewFreqs} = ydb_private_utils:do_binary_advance(
-        CurrM, NewState, NewT, Freqs, Epsilon)
-  %, NewM = ydb_private_utils:do_simple_count_II_advance(
-  %      CurrM, NewState, NewT, Epsilon)
-  , NoisyCount = get_count(NewT, NewM)
+  , NewTime = Timestamp - InitTime
+  , Sigma = get_sigma(RelevantData)
+  , {NewL, NewLT} = ydb_private_utils:do_logarithmic_advance(
+        {CurrL, CurrLT}, CurrTime, NewTime, Sigma, Epsilon/2)
+  , NewMState = ydb_private_utils:do_bounded_advance(
+        CurrMState, CurrTime, NewTime, Sigma, Epsilon/2, BoundedMech)
+  , NoisyCount = round(NewLT + element(1, NewMState))
   , NewTuple = Tuple#ydb_tuple{data=list_to_tuple([NoisyCount])}
-  %, ?TRACE("we have ~nL = ~p, ~nT = ~p, ~nM = ~p~n", [NewL, NewT, NewM])
   , ydb_plan_node:notify(
         erlang:self()
       , {tuple, NewTuple}
     )
-  , State#aggr_count{curr_l=NewL, curr_t=NewT, curr_m=NewM, freqs=NewFreqs}
+  , State#aggr_count{
+        curr_l=NewL, curr_lt=NewLT, curr_t=NewTime, curr_m=NewMState}
 .
 
 %% ----------------------------------------------------------------- %%
 
--spec get_relative_time(
-    InitTime :: undefined | integer()
-  , Time :: integer()
-) -> RelTime :: integer().
-
-%% @doc Returns the time, relative to the init time. If InitTime is
-%%      undefined, returns 0.
-get_relative_time(undefined, _) -> 0;
-
-get_relative_time(InitTime, Time) -> Time - InitTime.
-
-%% ----------------------------------------------------------------- %%
-
--spec get_stream(NewNum :: number()) ->
+-spec get_sigma(NewNum :: number()) ->
     NewCount :: 0 | 1.
 
-%% @doc Increments count if a non-null value is passed in.
-get_stream(null) -> 0;
-
-get_stream(_) -> 1.
+%% @doc Returns 0 if the value is null, and 1 if it is not.
+get_sigma(null) -> 0;
+get_sigma(_) -> 1.
 
 %%% =============================================================== %%%
 %%%  private tests                                                  %%%

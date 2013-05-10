@@ -5,123 +5,266 @@
 %%      differentially-private queries.
 -module(ydb_private_utils).
 
--export([get_next_power/1, get_prev_power/1, is_power_of_two/1]).
--export([add_inveps_noise/3, store_bit_frequency/4, get_bit_frequency/2,
-        do_simple_count_II_advance/4, do_logarithmic_advance/4,
-        do_binary_advance/5]).
+-export([do_bounded_advance/6, do_logarithmic_advance/5]).
 -export([random_laplace/1]).
-
-%%% TODO put this into a hrl file and remove from both
--record(mech_state, {
-    time :: integer()
-  , value=0 :: number()
-}).
-
--type mech_state() :: #mech_state{
-    time :: undefined | integer()
-  , value :: number()
-}.
-%% Internal mechanism state.
-
 
 %%% =============================================================== %%%
 %%%  API                                                            %%%
 %%% =============================================================== %%%
 
--spec do_binary_advance(
-    CurrM :: mech_state()
-  , New :: mech_state()
-  , Tm :: mech_state()
-  , Freqs :: dict()
-  , Eps :: number()
-) -> {NewM :: mech_state(), NewFreqs :: dict()}.
-
-%% @doc Advances the state of the bounded mechanism M to time TNew,
-%%      in this case adding noise as specified by simple counting
-%%      mechanism II.
-do_binary_advance(
-    _Curr = #mech_state{}
-  , _New = #mech_state{time=TSigma} % Sigma is 1 or 0
-  , _Tm = #mech_state{time=T} % the last power of 2 below TNew
-  , _Freqs
-  , _Eps
-) when TSigma == T ->
-    {#mech_state{time=0, value=0}, dict:new()}
-;
-
-do_binary_advance(
-    _Curr = #mech_state{}
-  , _New = #mech_state{time=TSigma, value=Sigma} % Sigma is 1 or 0
-  , _Tm = #mech_state{time=T} % the last power of 2 below TNew
-  , Freqs
-  , Eps
-) ->
-    Tau = TSigma - T
-  , EpsPrime = Eps/T
-  , NewFreqs = store_bit_frequency(Tau, Sigma, Freqs, EpsPrime)
-  , CumFreq = get_bit_frequency(Tau, NewFreqs)
-  , {#mech_state{time=Tau, value=CumFreq}, NewFreqs}
-.
-
-%% ----------------------------------------------------------------- %%
-
 -spec do_logarithmic_advance(
-    CurrL :: mech_state()
-  , CurrT :: mech_state()
-  , New :: mech_state()
+    CurrLState :: {number(), number()}
+  , CurrTime :: integer()
+  , NewTime :: integer()
+  , Sigma :: number()
   , Eps :: number()
-) -> {NewL :: mech_state(), NewT :: mech_state()}.
+) -> {NewL :: number(), NewLT :: number()}.
+
 
 %% @doc Adds as much noise as necessary and advances the value to
-%%      incorporate \sigma.
+%%      incorporate the new value of \sigma.
+%%
+%%      Basically implements the following logic:
+%%      if (NewTime < get_next_power(CurrTime))
+%%          {CurrL+\Sigma, CurrLT}
+%%      elseif is_power_of_two(NewTime)
+%%          {add_noise(CurrL) + \Sigma, add_noise(CurrL) + \Sigma}
+%%      else
+%%          {add_noise(CurrL) + Sigma, add_noise(CurrL)}
 do_logarithmic_advance(
-    _CurrL = #mech_state{time=T1, value=Beta}
-  , CurrT = #mech_state{}
-  , New=#mech_state{time=T2, value=Sigma}
+    _CurrLState = {CurrL, CurrLT}
+  , CurrTime
+  , NewTime
+  , Sigma
   , Eps
 ) ->
-    Gnp1 = get_next_power(T1)
-  , NewT = #mech_state{time=Gnp1, value=add_inveps_noise(Beta, Eps)}
-  , case find_case(Gnp1, T2) of
-        1 -> {CurrT, #mech_state{time=T2, value=Beta+Sigma}}
-      ; 2 -> {NewT#mech_state{value=NewT#mech_state.value + Sigma}
-                , #mech_state{time=T2, value=NewT#mech_state.value + Sigma}}
-      ; 3 -> {NewT, #mech_state{time=T2, value=NewT#mech_state.value + Sigma}}
-      ; 4 -> do_logarithmic_advance(NewT, NewT, New, Eps)
+    case get_case(CurrTime, NewTime) of
+        1 ->
+            {CurrL + Sigma, CurrLT}
+      ; 2 ->
+            NumSteps = num_steps(CurrTime, NewTime)
+          , NewLT = add_inveps_noise(CurrL, Eps, NumSteps) + Sigma
+          , {NewLT, NewLT}
+      ; 3 ->
+            NumSteps = num_steps(CurrTime, NewTime)
+          , NewLT = add_inveps_noise(CurrL, Eps, NumSteps)
+          , {NewLT + Sigma, NewLT}
     end
 .
 
 %% ----------------------------------------------------------------- %%
 
--spec do_simple_count_II_advance(
-    Curr :: mech_state()
-  , New :: mech_state()
-  , Tm :: mech_state()
+-spec do_bounded_advance(
+    CurrMState :: {number()} | {number(), dict()}
+  , CurrTime :: integer()
+  , NewTime :: integer()
+  , Sigma :: number()
   , Eps :: number()
-) -> NewM :: mech_state().
+  , Mechanism :: 'binary' | 'simple_count_II'
+) -> {NewM :: number()} | {NewM :: number(), NewFreqs :: dict()}.
 
-%% @doc Advances the state of the bounded mechanism M to time TNew,
-%%      in this case adding noise as specified by simple counting
-%%      mechanism II.
-do_simple_count_II_advance(
-    _Curr = #mech_state{}
-  , _New = #mech_state{time=TSigma} % Sigma is 1 or 0
-  , _Tm = #mech_state{time=T} % the last power of 2 below TNew
-  , _Eps
-) when TSigma == T ->
-    #mech_state{time=0, value=0}
+%% @doc Advances the bounded mechanism to time NewTime with value
+%%      Sigma, first resetting the state if necessary.
+%%
+%%      Implements the following logic:
+%%      if (NewTime < get_next_power(CurrTime))
+%%          do regular advance
+%%      elseif is_power_of_two(NewTime)
+%%          reset mechanism state
+%%      else
+%%          reset mecanism state
+%%          do advance with this (reset) state
+do_bounded_advance(CurrMState, CurrTime, NewTime, Sigma, Eps, 'binary') ->
+    case get_case(CurrTime, NewTime) of
+        1 -> do_binary_advance(CurrMState, NewTime, Sigma, Eps)
+      ; 2 -> {0, dict:new()}
+      ; 3 -> do_binary_advance({0, dict:new()}, NewTime, Sigma, Eps)
+    end
 ;
+do_bounded_advance(
+    CurrMState, CurrTime, NewTime, Sigma, Eps, 'simple_count_II') ->
+    case get_case(CurrTime, NewTime) of
+        1 -> do_simple_count_II_advance(
+                CurrMState, CurrTime, NewTime, Sigma, Eps)
+      ; 2 -> {0}
+      ; 3 -> do_simple_count_II_advance(
+                {0}, get_next_power(CurrTime), NewTime, Sigma, Eps)
+    end
+.
 
-do_simple_count_II_advance(
-    _Curr = #mech_state{time=T1, value=V1}
-  , _New = #mech_state{time=TSigma, value=Sigma} % Sigma is 1 or 0
-  , _Tm = #mech_state{time=T} % the last power of 2 below TNew
-  , Eps
+%% ----------------------------------------------------------------- %%
+
+-spec random_laplace(B :: float()) -> RandNum :: float().
+
+%% @doc Draws a random number from the Lap(b) distribution. Draws are
+%%      done by the following method, where F(x) is the cdf of
+%%      the Laplacian distribution.
+%%        1. Generate a random number *u* from uniform distribution
+%%           in interval [0, 1].
+%%        2. Compute the value x such that F(x) = u.
+%%        3. Take x to be the random number drawn from the distribution
+%%           (or we can just do x = F^(-1) (u) where F^(-1) is the
+%%           inverse CDF).
+%%      Lap(b) is the Laplace distribution with mean 0 and var 2b^2.
+%%
+%% http://en.wikipedia.org/wiki/Inverse_transform_sampling#The_method
+%% http://en.wikipedia.org/wiki/Laplace_distribution#Cumulative_distribution_function
+random_laplace(B) ->
+    U = random:uniform()
+  , RandNum = laplace_inverseCDF(U, B)
+  , RandNum
+.
+
+%%% =============================================================== %%%
+%%%  private functions                                              %%%
+%%% =============================================================== %%%
+
+-spec do_binary_advance(
+    CurrMState :: {number(), dict()}
+  , NewTime :: integer()
+  , Sigma :: number()
+  , Eps :: number()
+) -> {NewM :: number(), NewFreqs :: dict()}.
+
+%% @doc Adds a count of Sigma at time NewTime to the binary frequency
+%%      table, and returns the new noisy count at NewTime as well as
+%%      the new table. This is not pan-private, since the real values
+%%      are stored in the frequency table.
+do_binary_advance(_State = {_CurrM, Freqs}, NewTime, Sigma, Eps) ->
+    T = get_prev_power(NewTime)
+  , Tau = NewTime - T
+  , EpsPrime = Eps/T
+  , NewFreqs = store_bit_frequency(Tau, Sigma, Freqs, EpsPrime)
+  , NewM = get_bit_frequency(Tau, NewFreqs)
+  , {NewM, NewFreqs}
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec do_simple_count_II_advance(
+    CurrMState :: {number()}
+  , CurrTime :: integer()
+  , NewTime :: integer()
+  , Sigma :: number()
+  , Eps :: number()
+) -> {NewM :: number()}.
+
+%% @doc Adds a count of Sigma at time NewTime, as well as Lap(1/Eps)
+%%      noise for each timestep between CurrTime and NewTime. This is
+%%      pan private, as only the noisy count from each step is stored.
+do_simple_count_II_advance(_State = {CurrM}, CurrTime, NewTime, Sigma, Eps) ->
+    {add_inveps_noise(CurrM, Eps, NewTime - CurrTime) + Sigma}
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec num_steps(CurrTime :: integer(), NewTime :: integer()) ->
+    NumSteps :: integer().
+
+%% @doc Calculates the number of powers of 2 that occur between
+%%      CurrTime and NewTime.
+num_steps(0, NewTime) ->
+    round(math:log(get_prev_power(NewTime))/math:log(2)) + 1
+;
+num_steps(CurrTime, NewTime) ->
+    round(math:log(get_prev_power(NewTime) / get_prev_power(CurrTime))
+        / math:log(2))
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec add_inveps_noise(
+    Value :: number()
+  , Eps :: number()
+  , NumSteps :: integer()
 ) ->
-    %?TRACE("do adv with ~ncurr = ~p, ~nnew = ~p, ~nt = ~p~n", [Curr, New, Tm]),
-    {T2, V2} = {TSigma - T, Sigma}
-  %, ?TRACE("call abn with ~p, ~p, ~p~n", [V1, Eps, T2-T1])
-  , #mech_state{time=T2, value=add_inveps_noise(V1, Eps, T2 - T1) + V2}
+    NoisyValue :: number()
+.
+
+%% @doc Adds Lap(1/Eps) noise to the specified value NumSteps times,
+%%      i.e. returns Value + NumSteps * Lap(1/Eps).
+add_inveps_noise(Value, _Eps, 0) ->
+    Value
+;
+add_inveps_noise(Value, Eps, NumSteps) ->
+    NewValue = Value + random_laplace(1/Eps)
+  , add_inveps_noise(NewValue, Eps, NumSteps - 1)
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec get_case(CurrTime :: integer(), NewTime :: integer()) ->
+    integer().
+
+%% @doc Returns 1, 2, or 3, depending on what NewTime is in relation
+%%      to CurrTime, and whether it's a power of two.
+%%
+%%      Basically implements the following logic:
+%%      if (NewTime < get_next_power(CurrTime))
+%%          1
+%%      else if is_power_of_two(NewTime)
+%%          2
+%%      else
+%%          3
+get_case(CurrTime, NewTime) ->
+    case NewTime < get_next_power(CurrTime) of
+        true -> 1
+      ; false ->
+            case is_power_of_two(NewTime) of
+                true -> 2
+              ; false -> 3
+            end
+    end
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec is_power_of_two(T :: integer()) -> IsPower :: boolean().
+
+%% @doc Returns true if T is a power of 2.
+is_power_of_two(T) ->
+    T band (T - 1) == 0
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec get_next_power(T :: integer()) -> NextPower :: integer().
+
+%% @doc Returns the smallest power of 2 greater than T.
+get_next_power(0) -> 1;
+
+get_next_power(T) ->
+    case is_power_of_two(T) of
+        true -> 2 * T
+      ; false -> get_next_power(T, T - 1, 1)
+    end
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec get_next_power(
+    T :: integer()
+  , NewT :: integer()
+  , Shift :: integer()
+) ->
+    NextPower :: integer()
+.
+
+%% @doc Helper function for get_next_power/1
+get_next_power(T, NewT, Shift) ->
+    case is_power_of_two(NewT + 1) of
+        true -> NewT + 1
+      ; false -> get_next_power(T, NewT bor (NewT bsr Shift), Shift bsl 1)
+    end
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec get_prev_power(T :: integer()) -> PrevPower :: integer().
+
+%% @doc Returns the largest power of 2 less than or equal to T.
+get_prev_power(T) ->
+    get_next_power(T) bsr 1
 .
 
 %% ----------------------------------------------------------------- %%
@@ -163,118 +306,6 @@ get_bit_frequency(N, Freqs) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec is_power_of_two(T :: integer()) -> IsPower :: boolean().
-
-%% @doc Returns true if T is a power of 2.
-is_power_of_two(T) ->
-    T band (T - 1) == 0
-.
-
-%% ----------------------------------------------------------------- %%
-
--spec get_next_power(T :: integer()) -> NextPower :: integer().
-
-%% @doc Returns the smallest power of 2 greater than T.
-get_next_power(0) -> 1;
-
-get_next_power(T) ->
-    case is_power_of_two(T) of
-        true -> 2 * T
-      ; false -> get_next_power(T, T - 1, 1)
-    end
-.
-
-%% ----------------------------------------------------------------- %%
-
--spec get_prev_power(T :: integer()) -> PrevPower :: integer().
-
-%% @doc Returns the largest power of 2 less than or equal to T.
-get_prev_power(T) ->
-    get_next_power(T) bsr 1
-.
-
-%% ----------------------------------------------------------------- %%
-
--spec random_laplace(B :: float()) -> RandNum :: float().
-
-%% @doc Draws a random number from the Lap(b) distribution. Draws are
-%%      done by the following method, where F(x) is the cdf of
-%%      the Laplacian distribution.
-%%        1. Generate a random number *u* from uniform distribution
-%%           in interval [0, 1].
-%%        2. Compute the value x such that F(x) = u.
-%%        3. Take x to be the random number drawn from the distribution
-%%           (or we can just do x = F^(-1) (u) where F^(-1) is the
-%%           inverse CDF).
-%%      Lap(b) is the Laplace distribution with mean 0 and var 2b^2.
-%%
-%% http://en.wikipedia.org/wiki/Inverse_transform_sampling#The_method
-%% http://en.wikipedia.org/wiki/Laplace_distribution#Cumulative_distribution_function
-random_laplace(B) ->
-    U = random:uniform()
-  , RandNum = laplace_inverseCDF(U, B)
-  , RandNum
-.
-
-%%% =============================================================== %%%
-%%%  private functions                                              %%%
-%%% =============================================================== %%%
-
--spec find_case(NextPower :: integer(), T2 :: integer()) ->
-    Case :: integer().
-
-%% @doc Returns value based on relative position of T2 and the current
-%%      logarithmic interval in consideration. This tells us how to
-%%      update the L and T mech_states.
-find_case(NextPower, T2) when T2 < NextPower->
-    1 % T2 is in this interval.
-;
-find_case(NextPower, T2) when T2 == NextPower->
-    2 % T2 at the border of this interval.
-;
-find_case(NextPower, T2) when T2 < 2 * NextPower ->
-    3 % T2 is in next interval.
-;
-find_case(_NextPower, _T2) ->
-    4 % T2 is past next interval.
-.
-
-%% ----------------------------------------------------------------- %%
-
-
--spec add_inveps_noise(Value :: number(), Eps :: number()) ->
-    NoisyValue :: number()
-.
-
-%% @doc Adds Lap(1/Eps) noise to the specified value, returning
-%%      Value + Lap(1/Eps).
-add_inveps_noise(Value, Eps) ->
-    add_inveps_noise(Value, Eps, 1)
-.
-
-%% ----------------------------------------------------------------- %%
-
--spec add_inveps_noise(
-    Value :: number()
-  , Eps :: number()
-  , NumSteps :: integer()
-) ->
-    NoisyValue :: number()
-.
-
-%% @doc Adds Lap(1/Eps) noise to the specified value NumSteps times,
-%%      i.e. returns Value + NumSteps * Lap(1/Eps).
-add_inveps_noise(Value, _Eps, 0) ->
-    Value
-;
-add_inveps_noise(Value, Eps, NumSteps) ->
-    %?TRACE("add bin noise with ~p, ~p, ~p~n", [Value, Eps, NumSteps]),
-    NewValue = Value + random_laplace(1/Eps)
-  , add_inveps_noise(NewValue, Eps, NumSteps - 1)
-.
-
-%% ----------------------------------------------------------------- %%
-
 -spec get_true_bit_frequency(N :: integer(), Freqs :: dict()) ->
     CumFreq :: number().
 
@@ -311,6 +342,7 @@ get_bit_frequency(N, Freqs, CumFreq, Noisy) ->
             %    get_max_key(dict:fetch_keys(Freqs)), Freqs, 0, Noisy)
     end
 .
+
 
 %% ----------------------------------------------------------------- %%
 
@@ -356,20 +388,3 @@ sgn(Num) when Num == 0 -> 0;
 
 sgn(Num) when Num > 0 -> 1.
 
-%% ----------------------------------------------------------------- %%
-
--spec get_next_power(
-    T :: integer()
-  , NewT :: integer()
-  , Shift :: integer()
-) ->
-    NextPower :: integer()
-.
-
-%% @doc Helper function for get_next_power/1
-get_next_power(T, NewT, Shift) ->
-    case is_power_of_two(NewT + 1) of
-        true -> NewT + 1
-      ; false -> get_next_power(T, NewT bor (NewT bsr Shift), Shift bsl 1)
-    end
-.
