@@ -382,7 +382,7 @@ get_inserts(Diff) ->
 %% ----------------------------------------------------------------- %%
 
 -spec extract_values(
-    Tuple :: tuple()
+    Tuple :: ydb_tuple()
   , Columns :: [atom()]
   , Schema :: ydb_schema()
 ) ->
@@ -391,18 +391,22 @@ get_inserts(Diff) ->
 
 %% @doc Extracts the values corresponding to the column names from the
 %%      tuple.
-extract_values(Tuple, Columns, Schema)
-  when
-    is_tuple(Tuple)
-  , is_list(Columns)
+extract_values(
+    _Tuple = #ydb_tuple{timestamp = Timestamp, data = Data}
+  , Columns
+  , Schema
+) when
+    is_list(Columns)
   , is_list(Schema)
   ->
     SchemaD = dict:from_list(Schema)
 
   , lists:map(
-        fun (Column) when is_atom(Column) ->
+        fun ('$timestamp') -> Timestamp
+
+          ; (Column) when is_atom(Column) ->
             case dict:find(Column, SchemaD) of
-                {ok, {Index, _Type}} -> erlang:element(Index, Tuple)
+                {ok, {Index, _Type}} -> erlang:element(Index, Data)
 
               ; error -> undefined
             end
@@ -430,8 +434,8 @@ evaluate_tuples(
   , is_function(EvalFun, 1)
   ->
     lists:map(
-        fun (#ydb_tuple{data = Data}) ->
-            Values = extract_values(Data, Columns, Schema)
+        fun (Tuple = #ydb_tuple{}) ->
+            Values = extract_values(Tuple, Columns, Schema)
           , EvalFun(Values)
         end
 
