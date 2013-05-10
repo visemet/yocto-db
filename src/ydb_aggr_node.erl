@@ -13,7 +13,7 @@
 -record(aggr, {
     history_size=1 :: pos_integer() | 'infinity'
   , incremental=false :: boolean()
-  , grouped=false :: boolean()
+  , grouped=false :: [atom()] | false
 
   , schema=[] :: ydb_schema()
   , columns=[] :: [atom()]
@@ -21,15 +21,15 @@
   , result_name :: atom()
   , result_type :: atom()
 
-    % Evaluates an entry over which aggregates are taken
+    % Evaluates an entry over which aggregates are taken.
   , eval_fun :: 'undefined' | fun(([term()]) -> term())
-    % Computes the aggregate on a single diff
+    % Computes the aggregate on a single diff.
   , pr_fun ::
         'undefined'
-      | fun(([term()]) -> term())         % non-incremental
-      | fun(([term()], [term()]) -> term()) % incremental
+      | fun(([term()]) -> term())           % Non-incremental
+      | fun(([term()], [term()]) -> term()) % Incremental
 
-    % Computes the aggregate over all diffs
+    % Computes the aggregate over all diffs.
   , aggr_fun :: 'undefined' | fun(([term()]) -> term())
   , synopsis=new_synopsis() :: ets:tid()
 
@@ -40,7 +40,7 @@
 -type aggr() :: #aggr{
     history_size :: pos_integer()
   , incremental :: boolean()
-  , grouped :: boolean()
+  , grouped :: [atom()] | false
 
   , schema :: ydb_schema()
   , columns :: [atom()]
@@ -65,7 +65,7 @@
 -type option() ::
     {history_size, HistorySize :: pos_integer() | 'infinity'}
   | {incremental, Incremental :: boolean()}
-  | {grouped, Grouped :: boolean()}
+  | {grouped, Grouped :: [atom()] | boolean()}
   | {columns, Columns :: [atom()]}
   | {result_name, ResultName :: atom()}
   | {result_type, ResultType :: atom()}
@@ -76,7 +76,25 @@
     }
   | {aggr_fun, AggrFun :: fun(([term()]) -> term())}
 .
-%% TODO
+%% Options for the aggregate:
+%% <ul>
+%%   <li><code>{history_size, HistorySize}</code> - TODO</li>
+%%   <li><code>{incremental, Incremental}</code> - Is <code>true</code>
+%%       if want computation to be incremental. Is <code>false</code>
+%%       otherwise.</li>
+%%   <li><code>{grouped, Grouped}</code> - If no grouping id desired,
+%%       is equal to <code>false</code>. Otherwise is a list of
+%%       columm names to group by.</code></li>
+%%   <li><code>{columns, Columns}</code> - Columns to take the 
+%%       aggregate on.</li>
+%%   <li><code>{result_name, ResultName}</code> - The resulting name
+%%       of the aggregate column.</li>
+%%   <li><code>{result_type, ResultType}</code> - The resulting type
+%%       of the aggregate column.</li>
+%%   <li><code>{eval_fun, EvalFun}</code> - TODO</li>
+%%   <li><code>{pr_fun, PartialFun}</code> - TODO</li>
+%%   <li><code>{aggr_fun, AggrFun}</code> - TODO</li>
+%% </ul>
 
 %%% =============================================================== %%%
 %%%  API                                                            %%%
@@ -161,6 +179,7 @@ delegate({tuples, Tuples}, State = #aggr{}) when is_list(Tuples) ->
   , {ok, NewState}
 ;
 
+% TODO need to handle groups
 delegate({diffs, Diffs}, State = #aggr{
     result_name = ResultName
   , prev_result = PrevResult
@@ -173,8 +192,8 @@ delegate({diffs, Diffs}, State = #aggr{
             Tuples = get_inserts(Diff)
           , CurrAggr = do_update(Tuples, S0)
 
-          , Last = lists:last(Tuples) % assumes tuples are written in
-                                      % ascending order by timestamp
+          , Last = lists:last(Tuples) % Assumes tuples are written in
+                                      % ascending order by timestamp.
           , Timestamp = Last#ydb_tuple.timestamp
 
           , OldTuple = make_tuple(PrevTime, PrevResult)
@@ -255,13 +274,32 @@ delegate(_Request, State, _Extras) ->
 compute_schema([InputSchema], #aggr{
     result_name = Name
   , result_type = Type
+  , grouped = false
 }) ->
     ydb_plan_node:relegate(erlang:self(), {get_schema, InputSchema})
+    % TODO what does the line above do
 
   , OutputSchema = [{Name, {1, Type}}]
   , {ok, OutputSchema}
 ;
 
+compute_schema([InputSchema], #aggr{
+    result_name = Name
+  , result_type = Type
+  , grouped = Columns
+}) ->
+    ydb_plan_node:relegate(erlang:self(), {get_schema, InputSchema})
+    % TODO what does the line above do
+    
+    % Get the part of the schema with just the groups.
+  , GroupedSchema = ydb_group:compute_grouped_schema(InputSchema, Columns)
+  , NumGroupedCols = length(Columns)
+  
+    % Add on the aggregate column.
+  , OutputSchema = GroupedSchema ++ [{Name, {NumGroupedCols + 1, Type}}]
+  , {ok, OutputSchema}
+;
+    
 compute_schema(Schemas, #aggr{}) ->
     {error, {badarg, Schemas}}
 .
@@ -286,7 +324,7 @@ init([{history_size, HistorySize} | Args], State = #aggr{}) ->
 ;
 
 init([{incremental, Incremental} | Args], State = #aggr{}) ->
-    % The history size is set to 1 by default
+    % The history size is set to 1 by default.
     init(Args, State#aggr{incremental=Incremental})
 ;
 
@@ -328,6 +366,7 @@ init([Term | _Args], #aggr{}) ->
 
 %% @doc Returns a new ETS table used for storing partial results.
 new_synopsis() ->
+% TODO: cleanup
   %   {ok, Tid} = ydb_ets_utils:create_table(synopsis)
   % , Tid
 
@@ -338,7 +377,7 @@ new_synopsis() ->
     Timestamp :: non_neg_integer()
   , Data :: term()
 ) ->
-    ydb_tuple() | 'undefined'
+    ydb_plan_node:ydb_tuple() | 'undefined'
 .
 
 %% @doc Returns a new tuple with the specified timestamp and data.
@@ -400,7 +439,7 @@ do_update(Tuples, #aggr{
 
 %% ----------------------------------------------------------------- %%
 
--spec get_inserts(Diff :: ets:tid()) -> Tuples :: [ydb_tuple()].
+-spec get_inserts(Diff :: ets:tid()) -> Tuples :: [ydb_plan_node:ydb_tuple()].
 
 %% @doc Returns a list of PLUS (`+') tuples from the diff.
 get_inserts(Diff) ->
@@ -411,9 +450,9 @@ get_inserts(Diff) ->
 %% ----------------------------------------------------------------- %%
 
 -spec extract_values(
-    Tuple :: ydb_tuple()
+    Tuple :: ydb_plan_node:ydb_tuple()
   , Columns :: [atom()]
-  , Schema :: ydb_schema()
+  , Schema :: ydb_plan_node:ydb_schema()
 ) ->
     [term()]
 .
@@ -446,9 +485,9 @@ extract_values(
 .
 
 -spec evaluate_tuples(
-    Tuples :: [ydb_tuple()]
+    Tuples :: [ydb_plan_node:ydb_tuple()]
   , EvalFun :: fun(([term()]) -> term())
-  , {Columns :: [atom()], Schema :: ydb_schema()}
+  , {Columns :: [atom()], Schema :: ydb_plan_node:ydb_schema()}
 ) ->
     [term()]
 .

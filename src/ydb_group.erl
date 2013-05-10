@@ -7,6 +7,7 @@
 
 -export([start_link/2, start_link/3]).
 -export([init/1, delegate/2, delegate/3, compute_schema/2]).
+-export([compute_grouped_schema/2]).
 
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
@@ -238,6 +239,28 @@ compute_new_schema(Schema, Columns) ->
       , NewRange
     )
   , {GroupIndexes, OtherIndexes, NewSchema}
+.
+
+-spec compute_grouped_schema(
+    Schema :: ydb_plan_node:ydb_schema()
+  , Columns :: [atom()]
+) -> NewSchema :: ydb_plan_node:ydb_schema().
+
+%% @doc Computes part of the schema containing just the grouped columns.
+compute_grouped_schema(Schema, Columns) ->
+    GroupIndexes = ydb_predicate_utils:get_indexes(
+        true
+      , Columns
+      , dict:from_list(Schema)
+    )
+    
+  , ColRange = lists:seq(1, length(GroupIndexes))
+  , NewSchema = lists:map(fun(I) ->
+        Index = lists:nth(I, GroupIndexes)
+      , ydb_predicate_utils:get_col(I, Index, Columns, Schema, true) end
+      , ColRange
+    )
+  , NewSchema
 .
 
 %% ----------------------------------------------------------------- %%
