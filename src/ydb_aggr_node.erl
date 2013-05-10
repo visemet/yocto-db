@@ -118,13 +118,13 @@ init(Args) when is_list(Args) -> init(Args, #aggr{}).
 %%      for each such message received.
 delegate({tuples, Tuples}, State = #aggr{}) when is_list(Tuples) ->
     {AggrTuples, NewState} = lists:mapfoldl(
-        fun (Tuple, S0 = #aggr{}) ->
+        fun (Tuple = #ydb_tuple{timestamp = Timestamp}, S0 = #aggr{}) ->
             CurrAggr = do_update([Tuple], S0)
 
-          , NewTuple = Tuple#ydb_tuple{data={CurrAggr}}
+          , NewTuple = make_tuple(Timestamp, CurrAggr)
           , S1 = S0#aggr{
                 prev_result=CurrAggr
-              , prev_time=Tuple#ydb_tuple.timestamp
+              , prev_time=Timestamp
             }
 
           , {NewTuple, S1}
@@ -134,7 +134,17 @@ delegate({tuples, Tuples}, State = #aggr{}) when is_list(Tuples) ->
       , Tuples
     )
 
-  , ydb_plan_node:send_tuples(erlang:self(), AggrTuples)
+  , ydb_plan_node:send_tuples(
+        erlang:self()
+      , lists:filter(
+            fun (undefined) -> false
+
+              ; (_Tuple) -> true
+            end
+
+          , AggrTuples
+        )
+    )
 
   , {ok, NewState}
 ;
@@ -153,18 +163,30 @@ delegate({diffs, Diffs}, State = #aggr{
 
           , Last = lists:last(Tuples) % assumes tuples are written in
                                       % ascending order by timestamp
+          , Timestamp = Last#ydb_tuple.timestamp
 
-          , OldTuple = #ydb_tuple{timestamp=PrevTime, data={PrevResult}}
-          , NewTuple = Last#ydb_tuple{data={CurrAggr}}
+          , OldTuple = make_tuple(PrevTime, PrevResult)
+          , NewTuple = make_tuple(Timestamp, CurrAggr)
 
           , {ok, Tid} = ydb_ets_utils:create_diff_table(?MODULE)
 
-          , ydb_ets_utils:add_diffs(Tid, '-', ResultName, OldTuple)
-          , ydb_ets_utils:add_diffs(Tid, '+', ResultName, NewTuple)
+          , if
+                OldTuple =/= undefined ->
+                    ydb_ets_utils:add_diffs(Tid, '-', ResultName, OldTuple)
+
+              ; OldTuple =:= undefined -> pass
+            end
+
+          , if
+                NewTuple =/= undefined ->
+                    ydb_ets_utils:add_diffs(Tid, '+', ResultName, NewTuple)
+
+              ; NewTuple =:= undefined -> pass
+            end
 
           , S1 = S0#aggr{
                 prev_result=CurrAggr
-              , prev_time=NewTuple#ydb_tuple.timestamp
+              , prev_time=Timestamp
             }
 
           , {Tid, S1}
@@ -295,6 +317,22 @@ new_synopsis() ->
     ets:new(synopsis, [ordered_set])
 .
 
+-spec make_tuple(
+    Timestamp :: non_neg_integer()
+  , Data :: term()
+) ->
+    ydb_tuple() | 'undefined'
+.
+
+%% @doc Returns a new tuple with the specified timestamp and data.
+make_tuple(_Timestamp, undefined) ->
+    undefined
+;
+
+make_tuple(Timestamp, Aggr) ->
+    #ydb_tuple{timestamp=Timestamp, data={Aggr}}
+.
+
 %% ----------------------------------------------------------------- %%
 
 -spec do_update(Tuples :: [ydb_tuple()], State :: aggr()) ->
@@ -423,7 +461,6 @@ should_evict(Partials, HistorySize) ->
       ; NumPartials >= HistorySize -> true
     end
 .
-
 
 %% ----------------------------------------------------------------- %%
 
