@@ -12,6 +12,7 @@
 
 -record(aggr, {
     history_size=1 :: pos_integer() | 'infinity'
+  , incremental=false :: boolean()
   , grouped=false :: boolean()
 
   , schema=[] :: ydb_schema()
@@ -23,7 +24,10 @@
     % Evaluates an entry over which aggregates are taken
   , eval_fun :: 'undefined' | fun(([term()]) -> term())
     % Computes the aggregate on a single diff
-  , pr_fun :: 'undefined' | fun(([term()]) -> term())
+  , pr_fun ::
+        'undefined'
+      | fun(([term()]) -> term())         % non-incremental
+      | fun(([term()], [term()]) -> term()) % incremental
 
     % Computes the aggregate over all diffs
   , aggr_fun :: 'undefined' | fun(([term()]) -> term())
@@ -35,6 +39,7 @@
 
 -type aggr() :: #aggr{
     history_size :: pos_integer()
+  , incremental :: boolean()
   , grouped :: boolean()
 
   , schema :: ydb_schema()
@@ -44,7 +49,10 @@
   , result_type :: atom()
 
   , eval_fun :: 'undefined' | fun(([term()]) -> term())
-  , pr_fun :: 'undefined' | fun(([term()]) -> term())
+  , pr_fun ::
+        'undefined'
+      | fun(([term()]) -> term())
+      | fun(([term()], [term()]) -> term())
 
   , aggr_fun :: 'undefined' | fun(([term()]) -> term())
   , synopsis :: ets:tid()
@@ -56,12 +64,16 @@
 
 -type option() ::
     {history_size, HistorySize :: pos_integer() | 'infinity'}
+  | {incremental, Incremental :: boolean()}
   | {grouped, Grouped :: boolean()}
   | {columns, Columns :: [atom()]}
   | {result_name, ResultName :: atom()}
   | {result_type, ResultType :: atom()}
   | {eval_fun, EvalFun :: fun(([term()]) -> term())}
-  | {pr_fun, PartialFun :: fun(([term()]) -> term())}
+  | {pr_fun, PartialFun ::
+        fun(([term()]) -> term())
+      | fun(([term()], [term()]) -> term())
+    }
   | {aggr_fun, AggrFun :: fun(([term()]) -> term())}
 .
 %% TODO
@@ -273,6 +285,11 @@ init([{history_size, HistorySize} | Args], State = #aggr{}) ->
     init(Args, State#aggr{history_size=HistorySize})
 ;
 
+init([{incremental, Incremental} | Args], State = #aggr{}) ->
+    % The history size is set to 1 by default
+    init(Args, State#aggr{incremental=Incremental})
+;
+
 init([{grouped, Grouped} | Args], State = #aggr{}) ->
     init(Args, State#aggr{grouped=Grouped})
 ;
@@ -343,6 +360,7 @@ make_tuple(Timestamp, Aggr) ->
 %%      of tuples. Returns the previous and current aggregate.
 do_update(Tuples, #aggr{
     history_size = HistorySize
+  , incremental = Incremental
   , schema = Schema
   , columns = Columns
   , result_name = ResultName
@@ -354,9 +372,18 @@ do_update(Tuples, #aggr{
     is_list(Tuples)
   ->
     Partials = get_partials(Synopsis, ResultName)
-  , NewPartial = PartialFun(
-        evaluate_tuples(Tuples, EvalFun, {Columns, Schema})
-    )
+  , NewPartial = if
+        Incremental =:= true ->
+            PartialFun(
+                evaluate_tuples(Tuples, EvalFun, {Columns, Schema})
+              , Partials
+            )
+
+      ; Incremental =:= false ->
+            PartialFun(
+                evaluate_tuples(Tuples, EvalFun, {Columns, Schema})
+            )
+    end
 
   , add_partial(Synopsis, ResultName, NewPartial)
 
@@ -366,6 +393,8 @@ do_update(Tuples, #aggr{
       ; false -> pass
     end
 
+    % Technically, for an incremental algorithm, `AggrFun' only needs
+    % `NewPartial'.
   , AggrFun(lists:append(Partials, [NewPartial]))
 .
 
