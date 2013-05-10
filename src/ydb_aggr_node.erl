@@ -28,6 +28,9 @@
     % Computes the aggregate over all diffs
   , aggr_fun :: 'undefined' | fun(([term()]) -> term())
   , synopsis=new_synopsis() :: ets:tid()
+
+  , prev_result :: term()
+  , prev_time=0 :: non_neg_integer()
 }).
 
 -type aggr() :: #aggr{
@@ -45,6 +48,9 @@
 
   , aggr_fun :: 'undefined' | fun(([term()]) -> term())
   , synopsis :: ets:tid()
+
+  , prev_result :: term()
+  , prev_time :: non_neg_integer()
 }.
 %% Internal state of aggregate node.
 
@@ -108,31 +114,67 @@ init(Args) when is_list(Args) -> init(Args, #aggr{}).
     {ok, NewState :: aggr()}
 .
 
-%% @doc TODO
-delegate({tuples, Tuples}, State = #aggr{
-    schema = Schema
-  , columns = Columns
-  , eval_fun = EvalFun
-}) when
-    is_list(Tuples)
-  ->
-    _Values = evaluate_tuples(Tuples, EvalFun, {Columns, Schema})
+%% @doc Processes tuples and diffs by producing a new aggregate value
+%%      for each such message received.
+delegate({tuples, Tuples}, State = #aggr{}) when is_list(Tuples) ->
+    {AggrTuples, NewState} = lists:mapfoldl(
+        fun (Tuple, S0 = #aggr{}) ->
+            CurrAggr = do_update([Tuple], S0)
 
-  , {ok, State}
+          , NewTuple = Tuple#ydb_tuple{data={CurrAggr}}
+          , S1 = S0#aggr{
+                prev_result=CurrAggr
+              , prev_time=Tuple#ydb_tuple.timestamp
+            }
+
+          , {NewTuple, S1}
+        end
+
+      , State
+      , Tuples
+    )
+
+  , ydb_plan_node:send_tuples(erlang:self(), AggrTuples)
+
+  , {ok, NewState}
 ;
 
-delegate({diffs, Diffs}, State = #aggr{}) ->
-    NewState = lists:foldl(
+delegate({diffs, Diffs}, State = #aggr{
+    result_name = ResultName
+  , prev_result = PrevResult
+  , prev_time = PrevTime
+}) when
+    is_list(Diffs)
+  ->
+    {AggrDiffs, NewState} = lists:mapfoldl(
         fun (Diff, S0 = #aggr{}) ->
             Tuples = get_inserts(Diff)
-          , {ok, S1} = delegate({tuples, Tuples}, S0)
+          , CurrAggr = do_update(Tuples, S0)
 
-          , S1
+          , Last = lists:last(Tuples) % assumes tuples are written in
+                                      % ascending order by timestamp
+
+          , OldTuple = #ydb_tuple{timestamp=PrevTime, data={PrevResult}}
+          , NewTuple = Last#ydb_tuple{data={CurrAggr}}
+
+          , {ok, Tid} = ydb_ets_utils:create_diff_table(?MODULE)
+
+          , ydb_ets_utils:add_diffs(Tid, '-', ResultName, OldTuple)
+          , ydb_ets_utils:add_diffs(Tid, '+', ResultName, NewTuple)
+
+          , S1 = S0#aggr{
+                prev_result=CurrAggr
+              , prev_time=NewTuple#ydb_tuple.timestamp
+            }
+
+          , {Tid, S1}
         end
 
       , State
       , Diffs
     )
+
+  , ydb_plan_node:send_diffs(erlang:self(), AggrDiffs)
 
   , {ok, NewState}
 ;
@@ -247,14 +289,16 @@ init([Term | _Args], #aggr{}) ->
 
 %% @doc Returns a new ETS table used for storing partial results.
 new_synopsis() ->
-    {ok, Tid} = ydb_ets_utils:create_table(synopsis)
-  , Tid
+  %   {ok, Tid} = ydb_ets_utils:create_table(synopsis)
+  % , Tid
+
+    ets:new(synopsis, [ordered_set])
 .
 
 %% ----------------------------------------------------------------- %%
 
 -spec do_update(Tuples :: [ydb_tuple()], State :: aggr()) ->
-    {PrevAggr :: term(), CurrAggr :: term()}
+    CurrAggr :: term()
 .
 
 %% @doc Performs the update to the synopsis based on the received list
@@ -272,24 +316,19 @@ do_update(Tuples, #aggr{
     is_list(Tuples)
   ->
     Partials = get_partials(Synopsis, ResultName)
-
   , NewPartial = PartialFun(
         evaluate_tuples(Tuples, EvalFun, {Columns, Schema})
     )
+
   , add_partial(Synopsis, ResultName, NewPartial)
 
-  , NewPartials = case should_evict(Partials, HistorySize) of
-        true ->
-            remove_partial(Synopsis, ResultName, erlang:hd(Partials))
-          , lists:append(erlang:tl(Partials), [NewPartial])
+  , case should_evict(Partials, HistorySize) of
+        true -> remove_partial(Synopsis, ResultName, erlang:hd(Partials))
 
-      ; false -> lists:append(Partials, [NewPartial])
+      ; false -> pass
     end
 
-  , PrevAggr = AggrFun(Partials)
-  , CurrAggr = AggrFun(NewPartials)
-
-  , {PrevAggr, CurrAggr}
+  , AggrFun(lists:append(Partials, [NewPartial]))
 .
 
 %% ----------------------------------------------------------------- %%
@@ -305,7 +344,7 @@ get_inserts(Diff) ->
 %% ----------------------------------------------------------------- %%
 
 -spec extract_values(
-    Tuple :: ydb_tuple()
+    Tuple :: tuple()
   , Columns :: [atom()]
   , Schema :: ydb_schema()
 ) ->
@@ -314,13 +353,21 @@ get_inserts(Diff) ->
 
 %% @doc Extracts the values corresponding to the column names from the
 %%      tuple.
-extract_values(Tuple, Columns, Schema) ->
+extract_values(Tuple, Columns, Schema)
+  when
+    is_tuple(Tuple)
+  , is_list(Columns)
+  , is_list(Schema)
+  ->
     SchemaD = dict:from_list(Schema)
 
   , lists:map(
         fun (Column) when is_atom(Column) ->
-            {Index, _Type} = dict:fetch(Column, SchemaD)
-          , erlang:element(Index, Tuple)
+            case dict:find(Column, SchemaD) of
+                {ok, {Index, _Type}} -> erlang:element(Index, Tuple)
+
+              ; error -> undefined
+            end
         end
 
       , Columns
@@ -328,7 +375,7 @@ extract_values(Tuple, Columns, Schema) ->
 .
 
 -spec evaluate_tuples(
-    Tuples :: [ydb_tuple]
+    Tuples :: [ydb_tuple()]
   , EvalFun :: fun(([term()]) -> term())
   , {Columns :: [atom()], Schema :: ydb_schema()}
 ) ->
@@ -419,7 +466,9 @@ add_partial(Synopsis, ResultName, Partial) ->
 
 %% @doc Deletes the partial result from the synopsis.
 remove_partial(Synopsis, ResultName, Partial) ->
-    Num = erlang:hd(ets:match(Synopsis, {{ResultName, '$1'}, Partial}))
+    Num = erlang:hd(lists:append(
+        ets:match(Synopsis, {{ResultName, '$1'}, Partial})
+    ))
 
   , ets:delete(Synopsis, {ResultName, Num})
   , ok
