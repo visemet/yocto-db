@@ -80,6 +80,7 @@
   , curr_m = #mech_state{time=0, value=0} :: mech_state()
   , epsilon=0.01 :: number()
   , init_time :: integer()
+  , freqs=dict:new() :: dict()
 }).
 
 -type aggr_count() :: #aggr_count{
@@ -90,6 +91,7 @@
   , curr_m :: mech_state()
   , epsilon :: number()
   , init_time :: undefined | integer()
+  , freqs :: undefined | dict()
 }.
 %% Internal count aggregate state.
 
@@ -303,7 +305,8 @@ check_tuple(
       , curr_t=CurrT
       , curr_m=CurrM
       , epsilon=Epsilon
-      , init_time=InitTime}
+      , init_time=InitTime
+      , freqs = Freqs}
 ) ->
     RelevantData = element(Index, Data)
   , RelTimestamp = get_relative_time(InitTime, Timestamp)
@@ -311,8 +314,10 @@ check_tuple(
   , NewState = #mech_state{time=RelTimestamp, value=Stream}
   , {NewT, NewL} = ydb_private_utils:do_logarithmic_advance(
         CurrL, CurrT, NewState, Epsilon)
-  , NewM = ydb_private_utils:do_simple_count_II_advance(
-        CurrM, NewState, NewT, Epsilon)
+  , {NewM, NewFreqs} = ydb_private_utils:do_binary_advance(
+        CurrM, NewState, NewT, Freqs, Epsilon)
+  %, NewM = ydb_private_utils:do_simple_count_II_advance(
+  %      CurrM, NewState, NewT, Epsilon)
   , NoisyCount = get_count(NewT, NewM)
   , NewTuple = Tuple#ydb_tuple{data=list_to_tuple([NoisyCount])}
   %, ?TRACE("we have ~nL = ~p, ~nT = ~p, ~nM = ~p~n", [NewL, NewT, NewM])
@@ -320,7 +325,7 @@ check_tuple(
         erlang:self()
       , {tuple, NewTuple}
     )
-  , State#aggr_count{curr_l=NewL, curr_t=NewT, curr_m=NewM}
+  , State#aggr_count{curr_l=NewL, curr_t=NewT, curr_m=NewM, freqs=NewFreqs}
 .
 
 %% ----------------------------------------------------------------- %%
