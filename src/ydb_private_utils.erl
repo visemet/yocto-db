@@ -6,12 +6,45 @@
 -module(ydb_private_utils).
 
 -export([get_next_power/1, get_prev_power/1, is_power_of_two/1]).
+-export([store_bit_frequency/3, get_bit_frequency/2]).
 -export([random_laplace/1]).
 
 
 %%% =============================================================== %%%
 %%%  API                                                            %%%
 %%% =============================================================== %%%
+
+-spec store_bit_frequency(N :: integer(), V :: number(), Freqs :: dict()) ->
+    NewFreqs :: dict()
+.
+
+%% @doc Updates the binary frequency table to store a frequency of
+%%      V seen at time N. Returns the new table.
+store_bit_frequency(N, V, Freqs) ->
+    Max = get_max_key((dict:fetch_keys(Freqs)))
+  , NewFreqs = lists:foldl(
+        fun(X, Dict) -> dict:store(X, 0, Dict) end
+      , Freqs
+      , lists:seq(Max + 1, N - 1)) % returns [] if Max + 1 > N - 1
+  , IntFreq = lists:foldl(
+        fun(X, Sum) -> Sum + dict:fetch(X, NewFreqs) end
+      , V
+      , lists:seq(N - storage_size(N) + 1, N - 1))
+  , dict:store(N, IntFreq, NewFreqs)
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec get_bit_frequency(N :: integer(), Freqs :: dict())
+    -> CumFreq :: number().
+
+%% @ doc Returns cumulative frequency, calculated by recursively
+%%       reading values from a binary frequency table.
+get_bit_frequency(N, Freqs) ->
+    get_bit_frequency(N, Freqs, 0)
+.
+
+%% ----------------------------------------------------------------- %%
 
 -spec is_power_of_two(T :: integer()) -> IsPower :: boolean().
 
@@ -69,6 +102,44 @@ random_laplace(B) ->
 %%% =============================================================== %%%
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
+
+-spec get_bit_frequency(
+    N :: integer()
+  , Freqs :: dict()
+  , CumFreq :: number()
+)-> TotalCumFreq :: number().
+
+%% @doc Tail-recursive method to calculate cumulative frequency
+%%      from a binary frequency table.
+get_bit_frequency(0, _, CumFreq) -> CumFreq;
+get_bit_frequency(N, Freqs, CumFreq) ->
+    get_bit_frequency(
+        N - storage_size(N), Freqs, CumFreq + dict:fetch(N, Freqs))
+.
+
+%% ----------------------------------------------------------------- %%
+
+%% @doc Returns the number of values the node for this integer
+%%      will store, based on the binary representation of the
+%%      integer.
+-spec storage_size(N :: integer()) -> Size :: integer().
+
+storage_size(N) ->
+    N band (bnot N + 1)
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec get_max_key(Lst :: list()) -> Max :: integer().
+
+%% @doc Returns the maximum of all the values in the list, or 0 if the
+%%      list is empty.
+get_max_key([]) -> 0;
+get_max_key(Lst) ->
+    lists:max(Lst)
+.
+
+%% ----------------------------------------------------------------- %%
 
 -spec laplace_inverseCDF(U :: float(), B :: float()) -> InverseCDF :: float().
 
