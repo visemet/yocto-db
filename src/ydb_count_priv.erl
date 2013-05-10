@@ -309,8 +309,10 @@ check_tuple(
   , RelTimestamp = get_relative_time(InitTime, Timestamp)
   , Stream = get_stream(RelevantData)
   , NewState = #mech_state{time=RelTimestamp, value=Stream}
-  , {NewT, NewL} = do_logarithmic_advance(CurrL, CurrT, NewState, Epsilon)
-  , NewM = do_simple_count_II_advance(CurrM, NewState, NewT, Epsilon)
+  , {NewT, NewL} = ydb_private_utils:do_logarithmic_advance(
+        CurrL, CurrT, NewState, Epsilon)
+  , NewM = ydb_private_utils:do_simple_count_II_advance(
+        CurrM, NewState, NewT, Epsilon)
   , NoisyCount = get_count(NewT, NewM)
   , NewTuple = Tuple#ydb_tuple{data=list_to_tuple([NoisyCount])}
   %, ?TRACE("we have ~nL = ~p, ~nT = ~p, ~nM = ~p~n", [NewL, NewT, NewM])
@@ -333,140 +335,6 @@ check_tuple(
 get_relative_time(undefined, _) -> 0;
 
 get_relative_time(InitTime, Time) -> Time - InitTime.
-
-
-%% ----------------------------------------------------------------- %%
-
--spec find_case(NextPower :: integer(), T2 :: integer()) ->
-    Case :: integer().
-
-%% @doc Returns value based on relative position of T2 and the current
-%%      logarithmic interval in consideration. This tells us how to
-%%      update the L and T mech_states.
-find_case(NextPower, T2) when T2 < NextPower->
-    1 % T2 is in this interval.
-;
-find_case(NextPower, T2) when T2 == NextPower->
-    2 % T2 at the border of this interval.
-;
-find_case(NextPower, T2) when T2 < 2 * NextPower ->
-    3 % T2 is in next interval.
-;
-find_case(_NextPower, _T2) ->
-    4 % T2 is past next interval.
-.
-
-%% ----------------------------------------------------------------- %%
-
--spec do_logarithmic_advance(
-    CurrL :: mech_state()
-  , CurrT :: mech_state()
-  , New :: mech_state()
-  , Eps :: number()
-) -> {NewL :: mech_state(), NewT :: mech_state()}.
-
-%% @doc Adds as much noise as necessary and advances the value to
-%%      incorporate \sigma.
-do_logarithmic_advance(
-    _CurrL = #mech_state{time=T1, value=Beta}
-  , CurrT = #mech_state{}
-  , New=#mech_state{time=T2, value=Sigma}
-  , Eps
-) ->
-    Gnp1 = ydb_private_utils:get_next_power(T1)
-  , NewT = #mech_state{time=Gnp1, value=add_log_noise(Beta, Eps)}
-  , case find_case(Gnp1, T2) of
-        1 -> {CurrT, #mech_state{time=T2, value=Beta+Sigma}}
-      ; 2 -> {NewT#mech_state{value=NewT#mech_state.value + Sigma}
-                , #mech_state{time=T2, value=NewT#mech_state.value + Sigma}}
-      ; 3 -> {NewT, #mech_state{time=T2, value=NewT#mech_state.value + Sigma}}
-      ; 4 -> do_logarithmic_advance(NewT, NewT, New, Eps)
-    end
-.
-
-%% ----------------------------------------------------------------- %%
-
--spec add_log_noise(Beta :: number(), Eps :: number()) ->
-    NoisyBeta :: number()
-.
-
-%% @doc Applies Lap(1/Eps) noise to specified value.
-add_log_noise(Beta, Eps) ->
-    Beta + ydb_private_utils:random_laplace(1/Eps)
-.
-
-%% ----------------------------------------------------------------- %%
-
--spec do_simple_count_II_advance(
-    Curr :: mech_state()
-  , New :: mech_state()
-  , Tm :: mech_state()
-  , Eps :: number()
-) -> NewM :: mech_state().
-
-%% @doc Advances the state of the bounded mechanism M to time TNew,
-%%      in this case adding noise as specified by simple counting
-%%      mechanism II.
-do_simple_count_II_advance(
-    _Curr = #mech_state{}
-  , _New = #mech_state{time=TSigma} % Sigma is 1 or 0
-  , _Tm = #mech_state{time=T} % the last power of 2 below TNew
-  , _Eps
-) when TSigma == T ->
-    #mech_state{time=0, value=0}
-;
-
-do_simple_count_II_advance(
-    _Curr = #mech_state{time=T1, value=V1}
-  , _New = #mech_state{time=TSigma, value=Sigma} % Sigma is 1 or 0
-  , _Tm = #mech_state{time=T} % the last power of 2 below TNew
-  , Eps
-) ->
-    %?TRACE("do adv with ~ncurr = ~p, ~nnew = ~p, ~nt = ~p~n", [Curr, New, Tm]),
-    {T2, V2} = {TSigma - T, Sigma}
-  %, ?TRACE("call abn with ~p, ~p, ~p~n", [V1, Eps, T2-T1])
-  , #mech_state{time=T2, value=add_inveps_noise(V1, Eps, T2 - T1) + V2}
-.
-
-%% ----------------------------------------------------------------- %%
-
--spec add_inveps_noise(
-    Value :: number()
-  , Eps :: number()
-  , NumSteps :: integer()
-) ->
-    NoisyValue :: number()
-.
-
-%% @doc Adds binary noise of size Lap(1/Eps)
-add_inveps_noise(Value, _Eps, 0) ->
-    Value
-;
-add_inveps_noise(Value, Eps, NumSteps) ->
-    %?TRACE("add bin noise with ~p, ~p, ~p~n", [Value, Eps, NumSteps]),
-    NewValue = Value + ydb_private_utils:random_laplace(1/Eps)
-  , add_binary_noise(NewValue, Eps, NumSteps - 1)
-.
-
-%% ----------------------------------------------------------------- %%
-
--spec add_binary_noise(
-    Value :: number()
-  , T :: number() % but this is a time it should be an integer....
-  , NumSteps :: integer()
-) ->
-    NoisyValue :: number()
-.
-
-%% @doc Adds binary noise of size Lap(Arg)
-add_binary_noise(Value, _Arg, 0) ->
-    Value
-;
-add_binary_noise(Value, Arg, NumSteps) ->
-    %?TRACE("add bin noise with ~p, ~p, ~p~n", [Value, Arg, NumSteps]),
-    NewValue = Value + ydb_private_utils:random_laplace(Arg)
-  , add_binary_noise(NewValue, Arg, NumSteps - 1)
-.
 
 %% ----------------------------------------------------------------- %%
 
