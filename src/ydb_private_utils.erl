@@ -23,14 +23,14 @@
 store_bit_frequency(N, V, Freqs) ->
     Max = get_max_key((dict:fetch_keys(Freqs)))
   , NewFreqs = lists:foldl(
-        fun(X, Dict) -> dict:store(X, 0, Dict) end
+        fun(X, Dict) -> store_bit_frequency(X, 0, Dict) end
       , Freqs
       , lists:seq(Max + 1, N - 1)) % returns [] if Max + 1 > N - 1
-  , IntFreq = lists:foldl(
-        fun(X, Sum) -> Sum + dict:fetch(X, NewFreqs) end
-      , V
-      , lists:seq(N - storage_size(N) + 1, N - 1))
-  , dict:store(N, IntFreq, NewFreqs)
+
+  , IntervalFreq = get_bit_frequency(N-1, NewFreqs)
+                 - get_bit_frequency(N - storage_size(N), NewFreqs)
+                 + V
+  , dict:store(N, IntervalFreq, NewFreqs)
 .
 
 %% ----------------------------------------------------------------- %%
@@ -113,8 +113,12 @@ random_laplace(B) ->
 %%      from a binary frequency table.
 get_bit_frequency(0, _, CumFreq) -> CumFreq;
 get_bit_frequency(N, Freqs, CumFreq) ->
-    get_bit_frequency(
-        N - storage_size(N), Freqs, CumFreq + dict:fetch(N, Freqs))
+    case dict:find(N, Freqs) of
+        {ok, V} ->
+            get_bit_frequency(N - storage_size(N), Freqs, CumFreq + V)
+      ; error ->
+            get_bit_frequency(get_max_key(dict:fetch_keys(Freqs)), Freqs, 0)
+    end
 .
 
 %% ----------------------------------------------------------------- %%
