@@ -20,17 +20,16 @@
   , Eps :: number()
 ) -> {NewL :: number(), NewLT :: number()}.
 
-
 %% @doc Adds as much noise as necessary and advances the value to
-%%      incorporate the new value of \sigma.
+%%      incorporate the new value of Sigma.
 %%
 %%      Basically implements the following logic:
-%%      if (NewTime < get_next_power(CurrTime))
-%%          {CurrL+\Sigma, CurrLT}
-%%      elseif is_power_of_two(NewTime)
-%%          {add_noise(CurrL) + \Sigma, add_noise(CurrL) + \Sigma}
-%%      else
-%%          {add_noise(CurrL) + Sigma, add_noise(CurrL)}
+%%        if (NewTime &lt; get_next_power(CurrTime))
+%%            {CurrL + Sigma, CurrLT}
+%%        elseif is_power_of_two(NewTime)
+%%            {add_noise(CurrL) + Sigma, add_noise(CurrL) + Sigma}
+%%        else
+%%            {add_noise(CurrL) + Sigma, add_noise(CurrL)}
 do_logarithmic_advance(
     _CurrLState = {CurrL, CurrLT}
   , CurrTime
@@ -67,13 +66,13 @@ do_logarithmic_advance(
 %%      Sigma, first resetting the state if necessary.
 %%
 %%      Implements the following logic:
-%%      if (NewTime < get_next_power(CurrTime))
-%%          do regular advance
-%%      elseif is_power_of_two(NewTime)
-%%          reset mechanism state
-%%      else
-%%          reset mecanism state
-%%          do advance with this (reset) state
+%%        if (NewTime &lt; get_next_power(CurrTime))
+%%            do regular advance
+%%        elseif is_power_of_two(NewTime)
+%%            reset mechanism state
+%%        else
+%%            reset mechanism state
+%%            do advance with this (reset) state
 do_bounded_advance(CurrMState, CurrTime, NewTime, Sigma, Eps, 'binary') ->
     case get_case(CurrTime, NewTime) of
         1 -> do_binary_advance(CurrMState, NewTime, Sigma, Eps)
@@ -81,6 +80,7 @@ do_bounded_advance(CurrMState, CurrTime, NewTime, Sigma, Eps, 'binary') ->
       ; 3 -> do_binary_advance({0, dict:new()}, NewTime, Sigma, Eps)
     end
 ;
+
 do_bounded_advance(
     CurrMState, CurrTime, NewTime, Sigma, Eps, 'simple_count_II') ->
     case get_case(CurrTime, NewTime) of
@@ -98,14 +98,17 @@ do_bounded_advance(
 
 %% @doc Draws a random number from the Lap(b) distribution. Draws are
 %%      done by the following method, where F(x) is the cdf of
-%%      the Laplacian distribution.
-%%        1. Generate a random number *u* from uniform distribution
-%%           in interval [0, 1].
-%%        2. Compute the value x such that F(x) = u.
-%%        3. Take x to be the random number drawn from the distribution
-%%           (or we can just do x = F^(-1) (u) where F^(-1) is the
-%%           inverse CDF).
-%%      Lap(b) is the Laplace distribution with mean 0 and var 2b^2.
+%%      the Laplace distribution.
+%%      <ol>
+%%        <li>Generate a random number <i>u</i> from uniform
+%%            distribution in interval [0, 1].</li>
+%%        <li>Compute the value x such that F(x) = <i>u</i>.</li>
+%%        <li>Take x to be the random number drawn from the
+%%            distribution (or we can just do x = F<sup>-1</sup>
+%%            (<i>u</i>) where F<sup>-1</sup> is the inverse CDF.</li>
+%%      </ol>
+%%      Lap(b) is the Laplace distribution with mean 0 and variance
+%%      2b<sup>2</sup>.
 %%
 %% http://en.wikipedia.org/wiki/Inverse_transform_sampling#The_method
 %% http://en.wikipedia.org/wiki/Laplace_distribution#Cumulative_distribution_function
@@ -126,10 +129,10 @@ random_laplace(B) ->
   , Eps :: number()
 ) -> {NewM :: number(), NewFreqs :: dict()}.
 
-%% @doc Adds a count of Sigma at time NewTime to the binary frequency
-%%      table, and returns the new noisy count at NewTime as well as
-%%      the new table. This is not pan-private, since the real values
-%%      are stored in the frequency table.
+%% @doc Adds a count of Sigma at time NewTime to the binary
+%%      frequency table, and returns the new noisy count at NewTime as
+%%      well as the new table. This is not pan-private, since the real
+%%      values are stored in the frequency table.
 do_binary_advance(_State = {_CurrM, Freqs}, NewTime, Sigma, Eps) ->
     T = get_prev_power(NewTime)
   , Tau = NewTime - T
@@ -181,8 +184,8 @@ num_steps(CurrTime, NewTime) ->
     NoisyValue :: number()
 .
 
-%% @doc Adds Lap(1/Eps) noise to the specified value NumSteps times,
-%%      i.e. returns Value + NumSteps * Lap(1/Eps).
+%% @doc Adds Lap(1/Eps) noise to the specified value NumSteps times
+%%      (i.e. returns Value + NumSteps * Lap(1/Eps)).
 add_inveps_noise(Value, _Eps, 0) ->
     Value
 ;
@@ -197,15 +200,15 @@ add_inveps_noise(Value, Eps, NumSteps) ->
     integer().
 
 %% @doc Returns 1, 2, or 3, depending on what NewTime is in relation
-%%      to CurrTime, and whether it's a power of two.
+%%      to CurrTime, and whether it's a power of 2.
 %%
 %%      Basically implements the following logic:
-%%      if (NewTime < get_next_power(CurrTime))
-%%          1
-%%      else if is_power_of_two(NewTime)
-%%          2
-%%      else
-%%          3
+%%        if (NewTime &lt; get_next_power(CurrTime))
+%%            1
+%%        else if is_power_of_two(NewTime)
+%%            2
+%%        else
+%%            3
 get_case(CurrTime, NewTime) ->
     case NewTime < get_next_power(CurrTime) of
         true -> 1
@@ -346,9 +349,8 @@ get_bit_frequency(N, Freqs, CumFreq, Noisy) ->
 
 %% ----------------------------------------------------------------- %%
 
-%% @doc Returns the number of values the node for this integer
-%%      will store, based on the binary representation of the
-%%      integer.
+%% @doc Returns the number of values the node for this integer will
+%%      store, based on the binary representation of the integer.
 -spec storage_size(N :: integer()) -> Size :: integer().
 
 storage_size(N) ->
@@ -362,6 +364,7 @@ storage_size(N) ->
 %% @doc Returns the maximum of all the values in the list, or 0 if the
 %%      list is empty.
 get_max_key([]) -> 0;
+
 get_max_key(Lst) ->
     lists:max(Lst)
 .
@@ -371,7 +374,8 @@ get_max_key(Lst) ->
 -spec laplace_inverseCDF(U :: float(), B :: float()) -> InverseCDF :: float().
 
 %% @doc Returns the number x such that F(x) = u, where F(x) is the
-%%      CDF for the Laplace distribution with mean 0 and var 2b^2.
+%%      CDF for the Laplace distribution with mean 0 and variance
+%%      2b<sup>2</sup>.
 laplace_inverseCDF(U, B) ->
     X = -B * sgn(U - 0.5) * math:log(1 - 2 * abs(U - 0.5))
   , X
