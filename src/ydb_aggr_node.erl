@@ -1,4 +1,5 @@
-%% @author Max Hirschhorn <maxh@caltech.edu>
+%% @author Max Hirschhorn, Angela Gong
+%%         <maxh@caltech.edu, anjoola@anjoola.com>
 
 %% @doc TODO
 -module(ydb_aggr_node).
@@ -10,12 +11,16 @@
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
 
+-define(NO_GROUP, false).
+
 -record(aggr, {
     history_size=1 :: pos_integer() | 'infinity'
   , incremental=false :: boolean()
-  , grouped=false :: [atom()] | false
+  , grouped=?NO_GROUP :: [atom()] | ?NO_GROUP
+    % Indexes of the columns that are to be grouped.
+  , group_indexes=[] :: [integer()]
 
-  , schema=[] :: ydb_schema()
+  , schema=[] :: ydb_plan_node:ydb_schema()
   , columns=[] :: [atom()]
 
   , result_name :: atom()
@@ -33,20 +38,28 @@
   , aggr_fun :: 'undefined' | fun(([term()]) -> term())
   , synopsis=new_synopsis() :: ets:tid()
 
-  , prev_result :: term()
-  , prev_time=0 :: non_neg_integer()
+    % Previous result is a dictionary whose key is the group key and
+    % value is the previous result for that group. If there is not
+    % grouping, then the key is 'false' and there is only one entry
+    % in the dictionary.
+  , prev_result=dict:new() :: dict()
+    % Latest timestamps.
+  , prev_time=dict:new() :: dict()
+    % Latest internal ets table timestamps.
+  , prev_num=dict:new() :: dict()
 }).
 
 -type aggr() :: #aggr{
     history_size :: pos_integer()
   , incremental :: boolean()
-  , grouped :: [atom()] | false
+  , grouped :: [atom()] | ?NO_GROUP
+  , group_indexes :: [integer()]
 
-  , schema :: ydb_schema()
+  , schema :: ydb_plan_node:ydb_schema()
   , columns :: [atom()]
 
-  , result_name :: atom()
-  , result_type :: atom()
+  , result_name :: 'undefined' | atom()
+  , result_type :: 'undefined' | atom()
 
   , eval_fun :: 'undefined' | fun(([term()]) -> term())
   , pr_fun ::
@@ -57,8 +70,9 @@
   , aggr_fun :: 'undefined' | fun(([term()]) -> term())
   , synopsis :: ets:tid()
 
-  , prev_result :: term()
-  , prev_time :: non_neg_integer()
+  , prev_result :: dict()
+  , prev_time :: dict()
+  , prev_num :: dict()
 }.
 %% Internal state of aggregate node.
 
@@ -146,96 +160,26 @@ init(Args) when is_list(Args) -> init(Args, #aggr{}).
 
 %% @doc Processes tuples and diffs by producing a new aggregate value
 %%      for each such message received.
-delegate({tuples, Tuples}, State = #aggr{}) when is_list(Tuples) ->
-    {AggrTuples, NewState} = lists:mapfoldl(
-        fun (Tuple = #ydb_tuple{timestamp = Timestamp}, S0 = #aggr{}) ->
-            CurrAggr = do_update([Tuple], S0)
-
-          , NewTuple = make_tuple(Timestamp, CurrAggr)
-          , S1 = S0#aggr{
-                prev_result=CurrAggr
-              , prev_time=Timestamp
-            }
-
-          , {NewTuple, S1}
-        end
-
-      , State
-      , Tuples
-    )
-
-  , ydb_plan_node:send_tuples(
-        erlang:self()
-      , lists:filter(
-            fun (undefined) -> false
-
-              ; (_Tuple) -> true
-            end
-
-          , AggrTuples
-        )
-    )
-
+delegate(
+    {tuples, Tuples}
+  , State = #aggr{grouped=Grouped}
+) when is_list(Tuples) ->
+    NewState = process_tuples(Tuples, Grouped, State)
   , {ok, NewState}
 ;
 
-% TODO need to handle groups
-delegate({diffs, Diffs}, State = #aggr{
-    result_name = ResultName
-  , prev_result = PrevResult
-  , prev_time = PrevTime
-}) when
-    is_list(Diffs)
-  ->
-    {AggrDiffs, NewState} = lists:mapfoldl(
-        fun (Diff, S0 = #aggr{}) ->
-            Tuples = get_inserts(Diff)
-          , CurrAggr = do_update(Tuples, S0)
-
-          , Last = lists:last(Tuples) % Assumes tuples are written in
-                                      % ascending order by timestamp.
-          , Timestamp = Last#ydb_tuple.timestamp
-
-          , OldTuple = make_tuple(PrevTime, PrevResult)
-          , NewTuple = make_tuple(Timestamp, CurrAggr)
-
-          , {ok, Tid} = ydb_ets_utils:create_diff_table(?MODULE)
-
-          , if
-                OldTuple =/= undefined ->
-                    ydb_ets_utils:add_diffs(Tid, '-', ResultName, OldTuple)
-
-              ; OldTuple =:= undefined -> pass
-            end
-
-          , if
-                NewTuple =/= undefined ->
-                    ydb_ets_utils:add_diffs(Tid, '+', ResultName, NewTuple)
-
-              ; NewTuple =:= undefined -> pass
-            end
-
-          , S1 = S0#aggr{
-                prev_result=CurrAggr
-              , prev_time=Timestamp
-            }
-
-          , {Tid, S1}
-        end
-
-      , State
-      , Diffs
-    )
-
-  , ydb_plan_node:send_diffs(erlang:self(), AggrDiffs)
-
-  , {ok, NewState}
-;
-
-delegate({get_schema, Schema}, State = #aggr{}) ->
-    NewState = State#aggr{schema=Schema}
-
-  , {ok, NewState}
+delegate({get_schema, Schema}, State = #aggr{grouped=Grouped}) ->
+    % Get the indexes of the grouped columns, if grouping.
+    if
+        Grouped =/= false ->
+            GroupIndexes=ydb_group:get_group_indexes(Schema, Grouped)
+          , NewState = State#aggr{schema=Schema, group_indexes=GroupIndexes}
+          , {ok, NewState}
+          
+      ; Grouped =:= false ->
+            NewState = State#aggr{schema=Schema}
+          , {ok, NewState}
+    end
 ;
 
 delegate(_Request = {info, Message}, State = #aggr{}) ->
@@ -274,11 +218,10 @@ delegate(_Request, State, _Extras) ->
 compute_schema([InputSchema], #aggr{
     result_name = Name
   , result_type = Type
-  , grouped = false
+  , grouped = ?NO_GROUP
 }) ->
+    % Inform self of input schema.
     ydb_plan_node:relegate(erlang:self(), {get_schema, InputSchema})
-    % TODO what does the line above do
-
   , OutputSchema = [{Name, {1, Type}}]
   , {ok, OutputSchema}
 ;
@@ -288,8 +231,8 @@ compute_schema([InputSchema], #aggr{
   , result_type = Type
   , grouped = Columns
 }) ->
+    % Inform self of input schema.
     ydb_plan_node:relegate(erlang:self(), {get_schema, InputSchema})
-    % TODO what does the line above do
     
     % Get the part of the schema with just the groups.
   , GroupedSchema = ydb_group:compute_grouped_schema(InputSchema, Columns)
@@ -376,41 +319,136 @@ new_synopsis() ->
 -spec make_tuple(
     Timestamp :: non_neg_integer()
   , Data :: term()
+  , GroupKey :: ?NO_GROUP | tuple()
 ) ->
     ydb_plan_node:ydb_tuple() | 'undefined'
 .
 
 %% @doc Returns a new tuple with the specified timestamp and data.
-make_tuple(_Timestamp, undefined) ->
+make_tuple(_Timestamp, undefined, _GroupKey) ->
     undefined
 ;
 
-make_tuple(Timestamp, Aggr) ->
+make_tuple(Timestamp, Aggr, ?NO_GROUP) ->
     #ydb_tuple{timestamp=Timestamp, data={Aggr}}
+;
+
+make_tuple(Timestamp, Aggr, GroupKey) ->
+    #ydb_tuple{
+        timestamp=Timestamp
+        % Add the grouped columns to the front first.
+      , data=erlang:append_element(GroupKey, Aggr)
+    }
 .
 
 %% ----------------------------------------------------------------- %%
 
--spec do_update(Tuples :: [ydb_tuple()], State :: aggr()) ->
-    CurrAggr :: term()
+-spec process_tuples(
+    Tuples :: [ydb_plan_node:ydb_tuple()]
+  , Grouped :: ?NO_GROUP | tuple() | [tuple()]
+  , State :: aggr()
+) -> 
+    NewState :: aggr()
+.
+
+%% @doc Process newly-received tuples.
+process_tuples(
+    Tuples
+  , Grouped
+  , State=#aggr{group_indexes=GroupIndexes}
+)
+  when
+    is_list(Grouped)
+  ->
+    % Split tuples into their groups. Is a list of tuples containing
+    % the key for the group GroupKey and the list of tuples in that group
+    % GroupTuples -> {GroupKey, GroupTuples}.
+    ListGroupedTuples = ydb_group:split_tuples(Tuples, GroupIndexes)
+    
+    % Process each group separately.
+  , NewState = lists:foldl(
+        fun({GroupKey, GroupTuples}, NewState) ->
+            process_tuples(GroupTuples, GroupKey, NewState)
+        end
+      , State
+      , ListGroupedTuples
+    )
+  , NewState
+;
+
+process_tuples(
+    Tuples
+  , Grouped
+  , State=#aggr{prev_result=PrevResult, prev_time=PrevTime}
+) ->
+    {AggrTuples, NewState} = lists:mapfoldl(
+        fun (Tuple = #ydb_tuple{timestamp = Timestamp}, S0 = #aggr{}) ->
+            {NewNum, CurrAggr} = do_update([Tuple], S0, Grouped)
+
+          , NewTuple = make_tuple(Timestamp, CurrAggr, Grouped)
+          , S1 = S0#aggr{
+                prev_result=dict:store(Grouped, CurrAggr, PrevResult)
+              , prev_time=dict:store(Grouped, Timestamp, PrevTime)
+              , prev_num=NewNum
+            }
+
+          , {NewTuple, S1}
+        end
+      , State
+      , Tuples
+    )
+    % Send tuples to listeners.
+  , ydb_plan_node:send_tuples(
+        erlang:self()
+      , lists:filter(
+            fun (undefined) -> false
+
+              ; (_Tuple) -> true
+            end
+
+          , AggrTuples
+        )
+    )
+  , NewState
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec do_update(
+    Tuples :: [ydb_plan_node:ydb_tuple()]
+  , State :: aggr()
+    % Either is ?NO_GROUP for no grouping or a tuple which is the key
+    % for the synopsis table.
+  , Grouped :: ?NO_GROUP | tuple()
+) ->
+    {NewNum :: dict(), CurrAggr :: term()}
 .
 
 %% @doc Performs the update to the synopsis based on the received list
 %%      of tuples. Returns the previous and current aggregate.
-do_update(Tuples, #aggr{
-    history_size = HistorySize
-  , incremental = Incremental
-  , schema = Schema
-  , columns = Columns
-  , result_name = ResultName
-  , eval_fun = EvalFun
-  , pr_fun = PartialFun
-  , aggr_fun = AggrFun
-  , synopsis = Synopsis
-}) when
+do_update(
+    Tuples
+  , #aggr{
+        history_size = HistorySize
+      , incremental = Incremental
+      , schema = Schema
+      , columns = Columns
+      , result_name = ResultName
+      , eval_fun = EvalFun
+      , pr_fun = PartialFun
+      , aggr_fun = AggrFun
+      , synopsis = Synopsis
+      , prev_num = PrevNum
+    }
+    % GroupKey can either be 'false' indicating no grouping is required,
+    % or the key for the group.
+  , GroupKey
+) when
     is_list(Tuples)
   ->
-    Partials = get_partials(Synopsis, ResultName)
+    % Key to store in the synopsis table.
+    SynopsisKey = {ResultName, GroupKey}
+  , Partials = get_partials(Synopsis, SynopsisKey)
   , NewPartial = if
         Incremental =:= true ->
             PartialFun(
@@ -424,17 +462,17 @@ do_update(Tuples, #aggr{
             )
     end
 
-  , add_partial(Synopsis, ResultName, NewPartial)
+  , NewNum = add_partial(Synopsis, PrevNum, SynopsisKey, NewPartial)
 
   , case should_evict(Partials, HistorySize) of
-        true -> remove_partial(Synopsis, ResultName, erlang:hd(Partials))
+        true -> remove_partial(Synopsis, SynopsisKey, erlang:hd(Partials))
 
       ; false -> pass
     end
 
     % Technically, for an incremental algorithm, `AggrFun' only needs
     % `NewPartial'.
-  , AggrFun(lists:append(Partials, [NewPartial]))
+  , {NewNum, AggrFun(lists:append(Partials, [NewPartial]))}
 .
 
 %% ----------------------------------------------------------------- %%
@@ -536,50 +574,56 @@ should_evict(Partials, HistorySize) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec get_partials(Synopsis :: ets:tid(), ResultName :: atom()) ->
+-spec get_partials(
+    Synopsis :: ets:tid()
+  , SynopsisKey :: {ResultName :: atom(), GroupKey :: ?NO_GROUP | tuple()}
+) ->
     Partials :: [term()]
 .
 
 %% @doc Returns the list of partial results stored in the synopsis.
-get_partials(Synopsis, ResultName) ->
-    lists:append(ets:match(Synopsis, {{ResultName, '_'}, '$1'}))
+get_partials(Synopsis, {ResultName, GroupKey}) ->
+    lists:append(ets:match(Synopsis, {{{ResultName, GroupKey}, '_'}, '$1'}))
 .
 
 -spec add_partial(
     Synopsis :: ets:tid()
-  , ResultName :: atom()
+  , Nums :: dict()
+  , SynopsisKey :: {ResultName :: atom(), GroupKey :: ?NO_GROUP | tuple()}
   , Partial :: term()
 ) ->
-    ok
+    NewNums :: dict()
 .
 
 %% @doc Inserts the partial result into the synopsis.
-add_partial(Synopsis, ResultName, Partial) ->
-    NextNum = case ets:last(Synopsis) of
-        '$end_of_table' -> 1
-
-      ; {ResultName, PrevNum} -> PrevNum + 1
+add_partial(Synopsis, Nums, SynopsisKey, Partial) ->
+    PrevNum = case dict:find(SynopsisKey, Nums) of
+        {ok, Value} -> Value
+        
+      ; error -> 0
     end
-
-  , ets:insert(Synopsis, {{ResultName, NextNum}, Partial})
-  , ok
+    
+  , CurrNum = PrevNum + 1
+  , NewNums = dict:store(SynopsisKey, CurrNum, Nums)
+  , ets:insert(Synopsis, {{SynopsisKey, CurrNum}, Partial})
+  , NewNums
 .
 
 -spec remove_partial(
     Synopsis :: ets:tid()
-  , ResultName :: atom()
+  , SynopsisKey :: {ResultName :: atom(), GroupKey :: ?NO_GROUP | tuple()}
   , Partial :: term()
 ) ->
     ok
 .
 
 %% @doc Deletes the partial result from the synopsis.
-remove_partial(Synopsis, ResultName, Partial) ->
+remove_partial(Synopsis, SynopsisKey, Partial) ->
     Num = erlang:hd(lists:append(
-        ets:match(Synopsis, {{ResultName, '$1'}, Partial})
+        ets:match(Synopsis, {{SynopsisKey, '$1'}, Partial})
     ))
 
-  , ets:delete(Synopsis, {ResultName, Num})
+  , ets:delete(Synopsis, {SynopsisKey, Num})
   , ok
 .
 
