@@ -25,7 +25,7 @@ identity([A]) -> A.
 
 -spec count_single(List :: [term()], Previous :: [integer()]) -> integer().
 
-%% @doc Computes the count over a single diff.
+%% @doc Computes the count over a single diff. This is the PartialFun.
 count_single(List, []) ->
     erlang:length(List)
 ;
@@ -36,7 +36,7 @@ count_single(List, [Prev]) ->
 
 -spec count_all(List :: [term()]) -> integer().
 
-%% @doc Computes the count over all the diffs.
+%% @doc Computes the count over all the diffs. This is the AggrFun.
 count_all(List) ->
     lists:last(List)
 .
@@ -45,7 +45,7 @@ count_all(List) ->
 
 -spec sum_single(List :: [term()], Previous :: [term()]) -> term().
 
-%% @doc Computes the sum over a single diff.
+%% @doc Computes the sum over a single diff. This is the PartialFun.
 sum_single(List, []) ->
     lists:sum(List)
 ;
@@ -56,7 +56,7 @@ sum_single(List, [Prev]) ->
 
 -spec sum_all(List :: [term()]) -> term().
 
-%% @doc Computes the sum over all the diffs.
+%% @doc Computes the sum over all the diffs. This is the AggrFun.
 sum_all(List) ->
     lists:last(List)
 .
@@ -78,8 +78,8 @@ avg_single(List, [{PrevCount, PrevSum}]) ->
 
 %% @doc Computes the avg over all the diffs. This is the AggrFun.
 avg_all(List) ->
-    {Count, Sum} = lists:last(List) % get the NewPartial
-  , Sum / Count % compute the average
+    {Count, Sum} = lists:last(List)
+  , Sum / Count
 .
 
 
@@ -87,7 +87,8 @@ avg_all(List) ->
 
 -spec min_single(List :: [term()], Previous :: [term()]) -> term().
 
-%% @doc Computes the minimum over a single diff.
+%% @doc Computes the minimum over a single diff. This is the
+%%      PartialFun.
 min_single(List, []) ->
     lists:min(List)
 ;
@@ -98,7 +99,7 @@ min_single(List, [Prev]) ->
 
 -spec min_all(List :: [term()]) -> term().
 
-%% @doc Computes the minimum over all the diffs.
+%% @doc Computes the minimum over all the diffs. This is the AggrFun.
 min_all(List) ->
     lists:min(List)
 .
@@ -107,7 +108,8 @@ min_all(List) ->
 
 -spec max_single(List :: [term()], Previous :: [term()]) -> term().
 
-%% @doc Computes the maximum over a single diff.
+%% @doc Computes the maximum over a single diff. This is the
+%%      PartialFun.
 max_single(List, []) ->
     lists:max(List)
 ;
@@ -118,7 +120,7 @@ max_single(List, [Prev]) ->
 
 -spec max_all(List :: [term()]) -> term().
 
-%% @doc Computes the maximum over all the diffs.
+%% @doc Computes the maximum over all the diffs. This is the AggrFun.
 max_all(List) ->
     lists:max(List)
 .
@@ -127,58 +129,60 @@ max_all(List) ->
 
 -spec var_single(List :: [term()], Previous :: [integer()]) -> term().
 
-%% @doc Computes the variance over a single diff. This is the
-%%      PartialFun.
+%% @doc Computes the population variance over a single diff. This is
+%%      the PartialFun.
 var_single(List, []) ->
     {
         erlang:length(List)
       , lists:sum(List)
-      , lists:sum(lists:map(fun(X) -> X*X end, List))
+      , lists:sum(lists:map(fun(X) -> X * X end, List))
     }
 ;
 var_single(List, [{PrevCount, PrevSum, PrevSumSq}]) ->
     {
         erlang:length(List) + PrevCount
       , lists:sum(List) + PrevSum
-      , lists:sum(lists:map(fun(X) -> X*X end, List)) + PrevSumSq
+      , lists:sum(lists:map(fun(X) -> X * X end, List)) + PrevSumSq
     }
 .
 
 -spec var_all(List :: [term()]) -> term().
 
-%% @doc Computes the avg over all the diffs. This is the AggrFun.
+%% @doc Computes the population variance over all the diffs. This is
+%%      the AggrFun.
 var_all(List) ->
-    {Count, Sum, SumSq} = lists:last(List) % get the NewPartial
-  , (Count * SumSq - Sum * Sum)/(Count * Count) % compute var
+    {Count, Sum, SumSq} = lists:last(List)
+  , (Count * SumSq - Sum * Sum) / (Count * Count)
 .
 
 %% ----------------------------------------------------------------- %%
 
 -spec stddev_single(List :: [term()], Previous :: [integer()]) -> term().
 
-%% @doc Computes the stddev over a single diff. This is the
-%%      PartialFun.
+%% @doc Computes the population standard deviation over a single diff.
+%%      This is the PartialFun.
 stddev_single(List, []) ->
     {
         erlang:length(List)
       , lists:sum(List)
-      , lists:sum(lists:map(fun(X) -> X*X end, List))
+      , lists:sum(lists:map(fun(X) -> X * X end, List))
     }
 ;
 stddev_single(List, [{PrevCount, PrevSum, PrevSumSq}]) ->
     {
         erlang:length(List) + PrevCount
       , lists:sum(List) + PrevSum
-      , lists:sum(lists:map(fun(X) -> X*X end, List)) + PrevSumSq
+      , lists:sum(lists:map(fun(X) -> X * X end, List)) + PrevSumSq
     }
 .
 
 -spec stddev_all(List :: [term()]) -> term().
 
-%% @doc Computes the stddev over all the diffs. This is the AggrFun.
+%% @doc Computes the population standard deviation over all the diffs.
+%%      This is the AggrFun.
 stddev_all(List) ->
     {Count, Sum, SumSq} = lists:last(List)
-  , math:sqrt((Count * SumSq - Sum * Sum)/(Count * Count))
+  , math:sqrt((Count * SumSq - Sum * Sum) / (Count * Count))
 .
 
 %% ----------------------------------------------------------------- %%
