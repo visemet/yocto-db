@@ -12,6 +12,7 @@
 -include("ydb_plan_node.hrl").
 
 -define(NO_GROUP, false).
+-define(is_dict (D), is_tuple(D) andalso is_element(1, D) =:= dict).
 
 -record(aggr, {
     history_size=1 :: pos_integer() | 'infinity'
@@ -42,11 +43,11 @@
     % value is the previous result for that group. If there is not
     % grouping, then the key is 'false' and there is only one entry
     % in the dictionary.
-  , prev_result=dict:new() :: dict()
+  , prev_results=dict:new() :: dict()
     % Latest timestamps.
-  , prev_time=dict:new() :: dict()
+  , prev_times=dict:new() :: dict()
     % Latest internal ets table timestamps.
-  , prev_num=dict:new() :: dict()
+  , prev_nums=dict:new() :: dict()
 }).
 
 -type aggr() :: #aggr{
@@ -70,9 +71,9 @@
   , aggr_fun :: 'undefined' | fun(([term()]) -> term())
   , synopsis :: ets:tid()
 
-  , prev_result :: dict()
-  , prev_time :: dict()
-  , prev_num :: dict()
+  , prev_results :: dict()
+  , prev_times :: dict()
+  , prev_nums :: dict()
 }.
 %% Internal state of aggregate node.
 
@@ -160,11 +161,27 @@ init(Args) when is_list(Args) -> init(Args, #aggr{}).
 
 %% @doc Processes tuples and diffs by producing a new aggregate value
 %%      for each such message received.
-delegate(
-    {tuples, Tuples}
-  , State = #aggr{grouped=Grouped}
-) when is_list(Tuples) ->
+delegate({tuples, Tuples}, State = #aggr{grouped=Grouped})
+  when
+    is_list(Tuples)
+  ->
     NewState = process_tuples(Tuples, Grouped, State)
+  , {ok, NewState}
+;
+
+delegate({diffs, Diffs}, State = #aggr{grouped=Grouped})
+  when
+    is_list(Diffs)
+  ->
+    {AggrDiffs, NewState} = lists:mapfoldl(
+        fun (Diff, S0 = #aggr{}) ->
+            Tuples = get_inserts(Diff)
+          , process_diffs(Tuples, Grouped, S0)
+        end
+      , State
+      , Diffs
+    )
+  , ydb_plan_node:send_diffs(erlang:self(), AggrDiffs)
   , {ok, NewState}
 ;
 
@@ -341,6 +358,28 @@ make_tuple(Timestamp, Aggr, GroupKey) ->
     }
 .
 
+-spec make_diff_tuple(
+    TimeDict :: dict()
+  , ResultDict :: dict()
+  , GroupKey :: ?NO_GROUP | tuple()
+) ->
+    ydb_plan_node:ydb_tuple() | 'undefined'
+.
+
+make_diff_tuple(TimeDict, ResultDict, GroupKey) ->
+    Timestamp = case dict:find(GroupKey, TimeDict) of
+        {ok, Time} -> Time
+      
+      ; error -> undefined
+    end
+    
+  , case dict:find(GroupKey, ResultDict) of
+        {ok, Result} -> make_tuple(Timestamp, Result, GroupKey)
+        
+      ; error -> undefined
+    end
+.
+
 %% ----------------------------------------------------------------- %%
 
 -spec process_tuples(
@@ -379,17 +418,17 @@ process_tuples(
 process_tuples(
     Tuples
   , Grouped
-  , State=#aggr{prev_result=PrevResult, prev_time=PrevTime}
+  , State=#aggr{prev_results=PrevResults, prev_times=PrevTimes}
 ) ->
     {AggrTuples, NewState} = lists:mapfoldl(
         fun (Tuple = #ydb_tuple{timestamp = Timestamp}, S0 = #aggr{}) ->
-            {NewNum, CurrAggr} = do_update([Tuple], S0, Grouped)
+            {NewNums, CurrAggr} = do_update([Tuple], S0, Grouped)
 
           , NewTuple = make_tuple(Timestamp, CurrAggr, Grouped)
           , S1 = S0#aggr{
-                prev_result=dict:store(Grouped, CurrAggr, PrevResult)
-              , prev_time=dict:store(Grouped, Timestamp, PrevTime)
-              , prev_num=NewNum
+                prev_results=dict:store(Grouped, CurrAggr, PrevResults)
+              , prev_times=dict:store(Grouped, Timestamp, PrevTimes)
+              , prev_nums=NewNums
             }
 
           , {NewTuple, S1}
@@ -409,6 +448,102 @@ process_tuples(
           , AggrTuples
         )
     )
+  , NewState
+.
+
+-spec process_diffs(
+    Tuples :: [ydb_plan_node:ydb_tuple()]
+  , Grouped :: ?NO_GROUP | [tuple()]
+  , State :: aggr()
+) ->
+    {Tid :: ets:tid(), NewState :: aggr()}
+.
+
+%% @doc Processes a newly-received diff.
+process_diffs(Tuples, ?NO_GROUP, State) ->
+    {ok, Tid} = ydb_ets_utils:create_diff_table(?MODULE)
+  , NewState = process_diff_group(Tuples, ?NO_GROUP, State, Tid)
+  , {Tid, NewState}
+;
+
+process_diffs(
+    Tuples
+  , Grouped
+  , State=#aggr{group_indexes=GroupIndexes}
+)
+  when
+    is_list(Tuples)
+  , is_list(Grouped)
+  ->
+  io:format("Tuples: ~w, Grouped: ~w, State: ~w~n~n", [Tuples, Grouped, State]),
+  
+    % Splits tuples into their groups. Is a list of tuples containing
+    % the key for the group GroupKey and the list of tuples in that group
+    % GroupTuples -> {GroupKey, GroupTuples}
+    ListGroupedTuples = ydb_group:split_tuples(Tuples, GroupIndexes)
+  
+  , {ok, Tid} = ydb_ets_utils:create_diff_table(?MODULE)
+    % Process each group separately.
+  , NewState = lists:foldl(
+        fun({GroupKey, GroupTuples}, NewState) ->
+            process_diff_group(GroupTuples, GroupKey, NewState, Tid)
+        end
+      , State
+      , ListGroupedTuples
+    )
+  , {Tid, NewState}
+.
+
+-spec process_diff_group(
+    Tuples :: [ydb_plan_node:ydb_tuple()]
+  , Grouped :: ?NO_GROUP | tuple()
+  , State :: aggr()
+  , Tid :: ets:tid()
+) ->
+    NewState :: aggr()
+.
+
+%% @doc Processes a particular group for diffs.
+process_diff_group(
+    Tuples
+  , Grouped
+  , State=#aggr{
+        result_name = ResultName
+      , prev_results = PrevResults
+      , prev_times = PrevTimes
+    }
+  , Tid
+) when
+    is_list(Tuples)
+  ->
+    {NewNums, CurrAggr} = do_update(Tuples, State, Grouped)
+    
+    % Assumes the tuples are written in ascending order by timestamp.
+  , Last = lists:last(Tuples)
+  , Timestamp = Last#ydb_tuple.timestamp
+  
+    % Inform listeners of new results.
+  , OldTuple = make_diff_tuple(PrevTimes, PrevResults, Grouped)
+  , NewTuple = make_tuple(Timestamp, CurrAggr, Grouped)
+  , if
+        OldTuple =/= undefined ->
+            ydb_ets_utils:add_diffs(Tid, '-', ResultName, OldTuple)
+      ; OldTuple =:= undefined ->
+            pass
+    end
+  , if
+        NewTuple =/= undefined ->
+            ydb_ets_utils:add_diffs(Tid, '+', ResultName, NewTuple)
+      ; NewTuple =:= undefined ->
+            pass
+    end
+    
+    % Update previous results.
+  , NewState = State#aggr{
+        prev_results=dict:store(Grouped, CurrAggr, PrevResults)
+      , prev_times=dict:store(Grouped, Timestamp, PrevTimes)
+      , prev_nums=NewNums
+    }
   , NewState
 .
 
@@ -438,7 +573,7 @@ do_update(
       , pr_fun = PartialFun
       , aggr_fun = AggrFun
       , synopsis = Synopsis
-      , prev_num = PrevNum
+      , prev_nums = PrevNums
     }
     % GroupKey can either be 'false' indicating no grouping is required,
     % or the key for the group.
@@ -462,7 +597,7 @@ do_update(
             )
     end
 
-  , NewNum = add_partial(Synopsis, PrevNum, SynopsisKey, NewPartial)
+  , NewNum = add_partial(Synopsis, PrevNums, SynopsisKey, NewPartial)
 
   , case should_evict(Partials, HistorySize) of
         true -> remove_partial(Synopsis, SynopsisKey, erlang:hd(Partials))
