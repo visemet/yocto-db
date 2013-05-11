@@ -70,8 +70,39 @@ init(Args) when is_list(Args) -> init(Args, #rstream{}).
 
 %% @doc Produces the current representation of the relation from the
 %%      diffs.
-delegate({diffs, Diffs}, State = #rstream{}) ->
-    {ok, State}
+delegate({diffs, Diffs}, State = #rstream{
+    synopsis = Synopsis
+}) when
+    is_list(Diffs)
+  ->
+    lists:foreach(
+        fun (Diff) ->
+            {Plus, Minus} = ydb_ets_utils:extract_diffs([Diff])
+
+          , lists:foreach(
+                fun (Tuple) ->
+                    do_insert(Synopsis, Tuple)
+                end
+
+              , Plus
+            )
+
+          , lists:foreach(
+                fun (Tuple) ->
+                    do_delete(Synopsis, Tuple)
+                end
+
+              , Minus
+            )
+
+          , Relation = get_relation(Synopsis)
+          , ydb_plan_node:send_tuples(erlang:self(), Relation)
+        end
+
+      , Diffs
+    )
+
+  , {ok, State}
 ;
 
 delegate({info, Message}, State = #rstream{}) ->
@@ -155,14 +186,14 @@ new_synopsis() ->
 
 %% @doc Inserts the specified tuple into the table.
 do_insert(Synopsis, Tuple) ->
-    case ets:update_counter(Synopsis, Tuple, {2, 1, 0, 0}) of
+    try ets:update_counter(Synopsis, Tuple, {2, 1}) of
+        % A copy of the tuple already existed in the table
+        Count when is_integer(Count), Count > 1 -> pass
+    catch
         % No object with the right key exists
-        badarg ->
+        error:badarg ->
             % Insert key=`Tuple' into the table with value=`1'
             ets:insert(Synopsis, {Tuple, 1})
-
-        % A copy of the tuple already existed in the table
-      ; Count when is_integer(Count), Count > 1 -> pass
     end
 
   , ok
@@ -198,7 +229,13 @@ do_delete(Synopsis, Tuple) ->
 
 %% @doc Returns the current representation of the relation.
 get_relation(Synopsis) ->
-    lists:append(ets:match(Synopsis, {'$1', '_'}))
+    lists:append(lists:map(
+        fun ({Tuple, Count}) ->
+            lists:duplicate(Count, Tuple)
+        end
+
+      , lists:append(ets:match(Synopsis, '$1'))
+    ))
 .
 
 %% ----------------------------------------------------------------- %%
