@@ -68,10 +68,10 @@ sum_all(List) ->
 %% @doc Computes the average over a single diff. This is the
 %%      PartialFun.
 avg_single(List, []) ->
-    {lists:length(List), lists:sum(List)}
+    {erlang:length(List), lists:sum(List)}
 ;
 avg_single(List, [{PrevCount, PrevSum}]) ->
-    {lists:length(List) + PrevCount, lists:sum(List) + PrevSum}
+    {erlang:length(List) + PrevCount, lists:sum(List) + PrevSum}
 .
 
 -spec avg_all(List :: [term()]) -> term().
@@ -131,14 +131,14 @@ max_all(List) ->
 %%      PartialFun.
 var_single(List, []) ->
     {
-        lists:length(List)
+        erlang:length(List)
       , lists:sum(List)
       , lists:sum(lists:map(fun(X) -> X*X end, List))
     }
 ;
 var_single(List, [{PrevCount, PrevSum, PrevSumSq}]) ->
     {
-        lists:length(List) + PrevCount
+        erlang:length(List) + PrevCount
       , lists:sum(List) + PrevSum
       , lists:sum(lists:map(fun(X) -> X*X end, List)) + PrevSumSq
     }
@@ -160,14 +160,14 @@ var_all(List) ->
 %%      PartialFun.
 stddev_single(List, []) ->
     {
-        lists:length(List)
+        erlang:length(List)
       , lists:sum(List)
       , lists:sum(lists:map(fun(X) -> X*X end, List))
     }
 ;
 stddev_single(List, [{PrevCount, PrevSum, PrevSumSq}]) ->
     {
-        lists:length(List) + PrevCount
+        erlang:length(List) + PrevCount
       , lists:sum(List) + PrevSum
       , lists:sum(lists:map(fun(X) -> X*X end, List)) + PrevSumSq
     }
