@@ -203,7 +203,7 @@ compute_schema(Schemas, #aggr_count{}) ->
 %% @doc Parses initializing arguments to set up the internal state of
 %%      the count aggregate node.
 init([], State = #aggr_count{}) ->
-    post_init(State)
+    {ok, State}
 ;
 
 init([{column, Column} | Args], State = #aggr_count{}) ->
@@ -221,14 +221,6 @@ init([{bounded_mech, Mech} | Args], State = #aggr_count{}) ->
 init([Term | _Args], #aggr_count{}) ->
     {error, {badarg, Term}}
 .
-
-post_init(State = #aggr_count{bounded_mech=BoundedMech}) ->
-    case BoundedMech of
-        binary -> {ok, State#aggr_count{curr_m={0, dict:new()}}}
-      ; simple_count_II -> {ok, State#aggr_count{curr_m={0}}}
-    end
-.
-
 
 %% ----------------------------------------------------------------- %%
 

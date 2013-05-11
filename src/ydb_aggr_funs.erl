@@ -10,6 +10,7 @@
          avg_single/2, avg_all/1]).
 -export([min_single/2, min_all/1, max_single/2, max_all/1]).
 -export([var_single/2, var_all/1, stddev_single/2, stddev_all/1]).
+-export([count_priv_single/2, count_priv_all/1]).
 
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
@@ -186,3 +187,81 @@ stddev_all(List) ->
 .
 
 %% ----------------------------------------------------------------- %%
+
+-spec count_priv_single(
+    List :: [{term(), integer(), {number(), atom()}}]
+  , Previous :: [{
+        integer()
+      , number()
+      , number()
+      , {number()} | {number(), dict()}
+      , integer()
+    }]
+) ->
+    {
+        NewTime :: integer()
+      , NewL :: number()
+      , NewLT :: number()
+      , NewM :: {number()} | {number(), dict()}
+      , Init :: integer()
+    }.
+
+%% @doc Computes the count over a single diff. This is the
+%%      PartialFun. Expects List to be a list of tuples of the form
+%%      {Data, Timestamp, Options={Epsilon, Mechanism}}
+count_priv_single(List = [{_Data, Timestamp, _Opts} | _Rest], []) ->
+    lists:foldl(
+        fun(Tuple, Partial) -> update_private_state(Tuple, Partial) end
+      , {0, 0, 0, undefined, Timestamp - 1}
+      , List
+    )
+;
+count_priv_single(List, [Prev={_Time, _L, _LT, _M, _Init}]) ->
+    lists:foldl(
+        fun(Tuple, Partial) -> update_private_state(Tuple, Partial) end
+      , Prev
+      , List
+    )
+.
+
+-spec count_priv_all(List :: [term()]) -> term().
+
+%% @doc Computes the count over all the diffs. This is the AggrFun.
+count_priv_all(List) ->
+    {_Time, _L, LT, M, _Init} = lists:last(List) % get the NewPartial
+  , round(LT + element(1, M))
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec update_private_state(
+    New :: {term(), integer(), {number(), atom()}}
+  , Partial :: {
+        integer()
+      , number()
+      , number()
+      , {number()} | {number(), dict()}
+      , integer()
+    }
+) ->
+    {
+        NewTime :: integer()
+      , NewL :: number()
+      , NewLT :: number()
+      , NewM :: {number()} | {number(), dict()}
+      , Init :: integer()
+    }.
+%% @doc Takes in the current partial results for a privacy-preserving
+%%      aggregates and updates the results for an incoming tuple.
+update_private_state(
+    _New={_Data, Timestamp, _Options={Eps, Mech}}
+  , _Partial={Time, L, LT, M, Init}
+) ->
+    NewTime = Timestamp - Init
+  , Sigma = 1
+  , {NewL, NewLT} = ydb_private_utils:do_logarithmic_advance(
+        {L, LT}, Time, NewTime, Sigma, Eps/2)
+  , NewM = ydb_private_utils:do_bounded_advance(
+        M, Time, NewTime, Sigma, Eps/2, Mech)
+  , {NewTime, NewL, NewLT, NewM, Init}
+.

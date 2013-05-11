@@ -73,6 +73,13 @@ do_logarithmic_advance(
 %%        else
 %%            reset mechanism state
 %%            do advance with this (reset) state
+do_bounded_advance(undefined, C, N, S, E, Mech) ->
+    case Mech of
+        'binary' -> do_bounded_advance({0, dict:new()}, C, N, S, E, Mech)
+      ; 'simple_count_II' -> do_bounded_advance({0}, C, N, S, E, Mech)
+    end
+;
+
 do_bounded_advance(CurrMState, CurrTime, NewTime, Sigma, Eps, 'binary') ->
     case get_case(CurrTime, NewTime) of
         1 -> do_binary_advance(CurrMState, NewTime, Sigma, Eps)
