@@ -50,9 +50,10 @@ test_setup(Predicate, NumResults) ->
     % Read from the file
   , {ok, InPid} = ydb_file_input:start_link([
         {filename, "../data/select_test_helper.dta"}
-      , {batch_size, 50}
+      , {batch_size, 100}
       , {poke_freq, 1}
     ], [{schema, Schema}])
+    
     % The select node
   , {ok, SelectPid} = ydb_select:start_link([
         {predicate, Predicate}
@@ -71,10 +72,10 @@ start_link_test_helper(Pid, Count, NumResults) when Count == NumResults ->
     Pid ! test_passed
 ;
 
-start_link_test_helper(Pid, Count, NumResults) ->
+start_link_test_helper(Pid, _Count, NumResults) ->
     receive
-        {tuple, {ydb_tuple, _Timestamp, _Data}} ->
-            start_link_test_helper(Pid, Count + 1, NumResults)
+        {'$gen_cast', {relegate, {tuples, Tuples}}} ->
+            start_link_test_helper(Pid, length(Tuples), NumResults)
       ; _Other -> Pid ! fail
     end
 .

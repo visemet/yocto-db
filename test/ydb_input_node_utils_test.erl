@@ -1,6 +1,6 @@
 %% @author Angela Gong <anjoola@anjoola.com>
 
-%% @doc This module tests the input_node_utils functions.
+%% @doc This module tests the input node utility functions.
 -module(ydb_input_node_utils_test).
 
 %% @headerfile "ydb_plan_node.hrl"

@@ -72,14 +72,6 @@ init(Args) when is_list(Args) -> init(Args, #socket_output{}).
 %% @doc Sends received tuples out through a socket at the port
 %%      and address initially specified.
 delegate(
-    _Request = {tuple, Tuple}
-  , State = #socket_output{socket = Sock}
-) ->
-    ydb_socket_utils:send_tuples(Sock, [Tuple])
-  , {ok, State}
-;
-
-delegate(
     _Request = {tuples, Tuples}
   , State = #socket_output{socket = Sock}
 ) when is_list(Tuples)

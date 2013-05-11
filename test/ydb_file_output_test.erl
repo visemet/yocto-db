@@ -1,7 +1,8 @@
 %% @author Angela Gong <anjoola@anjoola.com>
 
-%% @doc This module tests the file_output functions.
+%% @doc This module tests the file output functions.
 -module(ydb_file_output_test).
+
 -export([write_test_helper/1]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -61,11 +62,11 @@ check_result(Filename) ->
 
 write_test_helper(Pid) ->
     receive
-        {tuples, [
+        {'$gen_cast', {relegate, {tuples, [
             {ydb_tuple, _Timestamp1, {first}}
           , {ydb_tuple, _Timestamp2, {second, 2}}
           , {ydb_tuple, _Timestamp3, {3}}
-        ]} ->
+        ]}}} ->
             Pid ! test_passed
       ; _Other -> Pid ! fail
     end

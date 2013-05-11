@@ -1,6 +1,6 @@
 %% @author Angela Gong <anjoola@anjoola.com>
 
-%% @doc This module tests the file_input functions.
+%% @doc This module tests the file input functions.
 -module(ydb_file_input_test).
 -export([read_test_4_helper/2, read_test_5_helper/1, read_test_6_helper/2]).
 
@@ -66,16 +66,16 @@ read_test_4_helper(Pid, 2) -> Pid ! test_passed;
 
 read_test_4_helper(Pid, Count) ->
     receive
-        {tuples, [
+        {'$gen_cast', {relegate, {tuples, [
             {ydb_tuple, _Timestamp1, {first}}
           , {ydb_tuple, _Timestamp2, {second}}
           , {ydb_tuple, _Timestamp3, {third}}
-        ]} ->
+        ]}}} ->
             read_test_4_helper(Pid, Count + 1)
-      ; {tuples, [
+      ; {'$gen_cast', {relegate, {tuples, [
             {ydb_tuple, _Timestamp4, {fourth}}
           , {ydb_tuple, _Timestamp5, {fifth}}
-        ]} ->
+        ]}}} ->
             read_test_4_helper(Pid, Count + 1)
       ; _Other -> Pid ! fail
     end
@@ -96,13 +96,13 @@ read_test_5(Filename) ->
 
 read_test_5_helper(Pid) ->
     receive
-        {tuples, [
+        {'$gen_cast', {relegate, {tuples, [
             {ydb_tuple, _Timestamp1, {first}}
           , {ydb_tuple, _Timestamp2, {second}}
           , {ydb_tuple, _Timestamp3, {third}}
           , {ydb_tuple, _Timestamp4, {fourth}}
           , {ydb_tuple, _Timestamp5, {fifth}}
-        ]} ->
+        ]}}} ->
             Pid ! test_passed
       ; _Other -> Pid ! fail
     end
@@ -125,15 +125,25 @@ read_test_6_helper(Pid, 5) -> Pid ! test_passed;
 
 read_test_6_helper(Pid, Count) ->
     receive
-        {tuples, [{ydb_tuple, _Timestamp, {first}}]} ->
+        {'$gen_cast', {relegate, {tuples,
+            [{ydb_tuple, _Timestamp, {first}}]
+        }}} ->
             read_test_6_helper(Pid, Count + 1)
-      ; {tuples, [{ydb_tuple, _Timestamp, {second}}]} ->
+      ; {'$gen_cast', {relegate, {tuples,
+            [{ydb_tuple, _Timestamp, {second}}]
+        }}} ->
             read_test_6_helper(Pid, Count + 1)
-      ; {tuples, [{ydb_tuple, _Timestamp, {third}}]} ->
+      ; {'$gen_cast', {relegate, {tuples, 
+            [{ydb_tuple, _Timestamp, {third}}]
+        }}} ->
             read_test_6_helper(Pid, Count + 1)
-      ; {tuples, [{ydb_tuple, _Timestamp, {fourth}}]} ->
+      ; {'$gen_cast', {relegate, {tuples, 
+            [{ydb_tuple, _Timestamp, {fourth}}]
+        }}} ->
             read_test_6_helper(Pid, Count + 1)
-      ; {tuples, [{ydb_tuple, _Timestamp, {fifth}}]} ->
+      ; {'$gen_cast', {relegate, {tuples, 
+            [{ydb_tuple, _Timestamp, {fifth}}]
+        }}} ->
             read_test_6_helper(Pid, Count + 1)
       ; _Other -> Pid ! fail
     end

@@ -67,15 +67,6 @@ init(Args) when is_list(Args) -> init(Args, #file_output{}).
 %% @private
 %% @doc Accepts tuples and writes them to the file.
 delegate(
-    _Request = {tuple, Tuple}
-  , State = #file_output{filename=Filename}
-) ->
-    write(Filename, Tuple)
-  , {ok, State}
-;
-
-% Accepts a list of tuples.
-delegate(
     _Request = {tuples, Tuples}
   , State = #file_output{filename=Filename}
 ) when
@@ -179,20 +170,14 @@ close(IoDevice) ->
 
 -spec write(
     Filename :: string()
-  , Data :: ydb_plan_node:ydb_tuple() | [ydb_plan_node:ydb_tuple()]
+  , Data :: [ydb_plan_node:ydb_tuple()]
 ) ->
-    'ok'
+    ok
 .
 
 %% @private
 %% @doc Writes tuples to a file. Flushes the output by opening and
 %%      closing the file.
-write(Filename, Data) when is_tuple(Data) ->
-    IoDevice = open(Filename)
-  , io:fwrite(IoDevice, "~w.~n", [Data])
-  , close(IoDevice)
-;
-
 write(Filename, Data) when is_list(Data) ->
     IoDevice = open(Filename)
   , lists:foreach(fun(Tuple) ->

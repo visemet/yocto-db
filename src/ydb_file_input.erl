@@ -149,12 +149,8 @@ delegate(
 ) ->
     case read(IoDevice, BatchSize) of
         {continue, Data} ->
-            ydb_input_node_utils:push(
-                ydb_input_node_utils:make_tuples(Timestamp, Schema, Data)
-            )
-
-          , io:format("data ~p~n", [Data])
-
+            Tuples = ydb_input_node_utils:make_tuples(Timestamp, Schema, Data)
+          , ydb_plan_node:send_tuples(erlang:self(), Tuples)
           , timer:apply_after(
                 PokeFreq
               , ydb_plan_node
@@ -165,10 +161,8 @@ delegate(
           , {ok, State}
 
       ; {done, Data} ->
-            ydb_input_node_utils:push(
-                ydb_input_node_utils:make_tuples(Timestamp, Schema, Data)
-            )
-
+            Tuples = ydb_input_node_utils:make_tuples(Timestamp, Schema, Data)
+          , ydb_plan_node:send_tuples(erlang:self(), Tuples)
           , file:close(IoDevice)
 
           , NewState = State#file_input{

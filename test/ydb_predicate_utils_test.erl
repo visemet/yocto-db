@@ -1,6 +1,6 @@
 %% @author Angela Gong <anjoola@anjoola.com>
 
-%% @doc This module tests the predicate_utils functions.
+%% @doc This module tests the predicate utility functions.
 -module(ydb_predicate_utils_test).
 
 %% @headerfile "ydb_plan_node.hrl"

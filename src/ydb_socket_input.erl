@@ -142,10 +142,8 @@ delegate(
   , State = #socket_input{}
   , _Extras = [Schema, Timestamp]
 ) ->
-    lists:foreach(fun(X) -> ydb_input_node_utils:push(
-        ydb_input_node_utils:make_tuple(Timestamp, Schema, X)) end
-      , Data
-    )
+    Tuples = ydb_input_node_utils:make_tuples(Timestamp, Schema, Data)
+  , ydb_plan_node:send_tuples(erlang:self(), Tuples)
   , {ok, State}
 ;
 

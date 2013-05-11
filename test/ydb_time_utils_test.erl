@@ -3,8 +3,6 @@
 %% @doc This module tests the time_utils functions.
 -module(ydb_time_utils_test).
 
-%% @headerfile "ydb_plan_node.hrl"
--include("include/ydb_plan_node.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 convert_time_test() ->

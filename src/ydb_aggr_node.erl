@@ -11,8 +11,17 @@
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
 
+% Testing for private functions.
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 -define(NO_GROUP, false).
 -define(is_dict (D), is_tuple(D) andalso is_element(1, D) =:= dict).
+
+%%% =============================================================== %%%
+%%%  internal records and types                                     %%%
+%%% =============================================================== %%%
 
 -record(aggr, {
     history_size=1 :: pos_integer() | 'infinity'

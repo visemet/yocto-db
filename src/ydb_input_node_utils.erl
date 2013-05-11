@@ -1,11 +1,10 @@
 %% @author Max Hirschhorn <maxh@caltech.edu>
 
-%% @private
 %% @doc This module contains utility functions used for inputting
 %%      tuples.
 -module(ydb_input_node_utils).
 
--export([make_tuples/3, make_tuple/3, push/1]).
+-export([make_tuples/3, make_tuple/3]).
 
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
@@ -57,30 +56,6 @@ make_tuple({Unit, Name}, Schema, Data)
         {Unit, erlang:element(Index, Data)}
     )
   , new_tuple(Timestamp, Data)
-.
-
-%% ----------------------------------------------------------------- %%
-
--spec push(
-    Tuple :: ydb_plan_node:ydb_tuple()
-  | [ydb_plan_node:ydb_tuple()]
-) -> ok.
-
-%% @doc Pushes the tuple(s) to the listeners of the plan node. Defines
-%%      the way input streams are expected to serve data into the
-%%      system.
-push(Tuple = #ydb_tuple{}) ->
-    ydb_plan_node:notify(
-        erlang:self()
-      , {tuple, Tuple}
-    )
-;
-
-push(Tuples) when is_list(Tuples) ->
-    ydb_plan_node:notify(
-        erlang:self()
-      , {tuples, Tuples}
-    )
 .
 
 %%% =============================================================== %%%

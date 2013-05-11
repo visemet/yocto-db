@@ -1,6 +1,6 @@
 %% @author Kalpana Suraesh <ksuraesh@caltech.edu>
 
-%% @doc This module tests the input_node_utils functions.
+%% @doc This module tests the ets utility functions.
 -module(ydb_ets_utils_test).
 
 %% @headerfile "ydb_plan_node.hrl"

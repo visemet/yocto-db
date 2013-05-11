@@ -2,6 +2,7 @@
 
 %% @doc This module tests the project node functions.
 -module(ydb_project_test).
+
 -export([
     start_link_test_helper_0/2
   , start_link_test_helper_1/2
@@ -98,7 +99,9 @@ start_link_test_helper_0(Pid, Count) when Count == 100 ->
 
 start_link_test_helper_0(Pid, Count) ->
     receive
-        {tuple, {ydb_tuple, _Timestamp, {}}} ->
+        {'$gen_cast', {relegate, {tuples,
+            [{ydb_tuple, _Timestamp, {}}]
+        }}} ->
             start_link_test_helper_0(Pid, Count + 1)
       ; _Other -> Pid ! fail
     end
@@ -110,7 +113,9 @@ start_link_test_helper_1(Pid, Count) when Count == 100 ->
 
 start_link_test_helper_1(Pid, Count) ->
     receive
-        {tuple, {ydb_tuple, _Timestamp, {_Col1}}} ->
+        {'$gen_cast', {relegate, {tuples,
+            [{ydb_tuple, _Timestamp, {_Col1}}]
+        }}} ->
             start_link_test_helper_1(Pid, Count + 1)
       ; _Other -> Pid ! fail
     end
@@ -122,7 +127,9 @@ start_link_test_helper_2(Pid, Count) when Count == 100 ->
 
 start_link_test_helper_2(Pid, Count) ->
     receive
-        {tuple, {ydb_tuple, _Timestamp, {_Col1, _Col2}}} ->
+        {'$gen_cast', {relegate, {tuples,
+            [{ydb_tuple, _Timestamp, {_Col1, _Col2}}]
+        }}} ->
             start_link_test_helper_2(Pid, Count + 1)
       ; _Other -> Pid ! fail
     end
@@ -134,7 +141,9 @@ start_link_test_helper_3(Pid, Count) when Count == 100 ->
 
 start_link_test_helper_3(Pid, Count) ->
     receive
-        {tuple, {ydb_tuple, _Timestamp, {_Col1, _Col2, _Col3}}} ->
+        {'$gen_cast', {relegate, {tuples,
+            [{ydb_tuple, _Timestamp, {_Col1, _Col2, _Col3}}]
+        }}} ->
             start_link_test_helper_3(Pid, Count + 1)
       ; _Other -> Pid ! fail
     end
@@ -145,7 +154,7 @@ test_setup(Columns, Include, Listener) ->
     % Read from the file
   , {ok, InPid} = ydb_file_input:start_link([
         {filename, "../data/project_test_helper.dta"}
-      , {batch_size, 50}
+      , {batch_size, 1}
       , {poke_freq, 1}
     ], [{schema, Schema}])
     % The project node

@@ -87,23 +87,13 @@ init(_Args) -> {error, {badarg, not_options_list}}.
 .
 
 %% @private
-%% @doc Passes on the tuple to subscribers if it is satisfied by the
+%% @doc Passes on the tuples to subscribers if it is satisfied by the
 %%      given predicate.
-delegate(
-    _Request = {tuple, Tuple}
-  , State = #select{}
-) ->
-    check_tuple(Tuple, State)
-  , {ok, State}
-;
-
 delegate(
     _Request = {tuples, Tuples}
   , State = #select{}
 ) ->
-    lists:foreach(fun(Tuple) ->
-        check_tuple(Tuple, State) end, Tuples
-    )
+    check_tuples(Tuples, State)
   , {ok, State}
 ;
 
@@ -113,6 +103,7 @@ delegate(
 ) ->
     {ok, OutTid} = ydb_ets_utils:create_diff_table(select)
   , check_diffs(Tids, State, OutTid)
+  , ydb_plan_node:send_diffs(erlang:self(), [OutTid])
   , {ok, State}
 ;
 
@@ -192,23 +183,24 @@ init([Term | _Args], #select{}) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec check_tuple(
-    Tuple :: ydb_plan_node:ydb_tuple()
+-spec check_tuples(
+    Tuples :: [ydb_plan_node:ydb_tuple()]
   , State :: select()
 ) -> ok.
 
 %% @private
 %% Checks to see if this tuple satisfies the predicate. If so,
 %% passes the tuple on to the select node's listeners.
-check_tuple(Tuple, _State=#select{predicate=Predicate, schema=Schema}) ->
-    IsSatisfied = ydb_predicate_utils:is_satisfied(Tuple, Schema, Predicate)
-  , if IsSatisfied ->
-        ydb_plan_node:notify(
-            erlang:self()
-          , {tuple, Tuple}
-        )
-      ; true -> ok
-    end
+check_tuples(Tuples, _State=#select{predicate=Predicate, schema=Schema})
+  when 
+    is_list(Tuples)
+  ->
+    % Filter out the tuples that satisfy the predicate.
+    SatisfiedTuples = lists:filter(fun(Tuple) ->
+        ydb_predicate_utils:is_satisfied(Tuple, Schema, Predicate) end
+      , Tuples
+    )
+  , ydb_plan_node:send_tuples(erlang:self(), SatisfiedTuples)
 .
 
 -spec check_diffs(

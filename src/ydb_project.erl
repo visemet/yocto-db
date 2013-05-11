@@ -104,29 +104,20 @@ init(_Args) -> {error, {badarg, not_options_list}}.
 .
 
 %% @private
-%% @doc Passes on the tuple to subscribers after it is projected
+%% @doc Passes on the tuples to subscribers after it is projected
 %%      down.
-delegate(
-    _Request = {tuple, Tuple}
-  , State = #project{}
-) ->
-    check_tuple(Tuple, State)
-  , {ok, State}
-;
-
 delegate(
     _Request = {tuples, Tuples}
   , State = #project{}
 ) ->
-    lists:foreach(fun(Tuple) ->
-        check_tuple(Tuple, State) end, Tuples
-    )
+    check_tuples(Tuples, State)
   , {ok, State}
 ;
 
 delegate(_Request = {diffs, Tids}, State = #project{}) ->
     {ok, OutTid} = ydb_ets_utils:create_diff_table(project)
   , check_diffs(Tids, State, OutTid)
+  , ydb_plan_node:send_diffs(erlang:self(), [OutTid])
   , {ok, State}
 ;
 
@@ -271,20 +262,20 @@ project_tuple(
   , NewTuple
 .
 
--spec check_tuple(
-    Tuple :: ydb_plan_node:ydb_tuple()
+-spec check_tuples(
+    Tuples :: [ydb_plan_node:ydb_tuple()]
   , State :: project()
 ) -> ok.
 
 %% @private
-%% @doc Projects the tuple down to the desired columns, then passes it
-%%      along to the project node's listeners.
-check_tuple(Tuple, State) ->
-    NewTuple = project_tuple(Tuple, State)
-  , ydb_plan_node:notify(
-        erlang:self()
-      , {tuple, NewTuple}
+%% @doc Projects the tuple downs to the desired columns, then passes
+%%      it along to the project node's listeners.
+check_tuples(Tuples, State) when is_list(Tuples) ->
+    NewTuples = lists:map(fun(Tuple) ->
+        project_tuple(Tuple, State) end
+      , Tuples
     )
+  , ydb_plan_node:send_tuples(erlang:self(), NewTuples)
 .
 
 -spec check_diffs(
