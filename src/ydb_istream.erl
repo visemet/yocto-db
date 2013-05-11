@@ -66,9 +66,14 @@ init(Args) when is_list(Args) -> init(Args, #istream{}).
 
 %% @doc Extracts the inserted tuples from the diffs.
 delegate({diffs, Diffs}, State = #istream{}) when is_list(Diffs) ->
-    Tuples = get_inserts(Diffs)
+    lists:foreach(
+        fun (Diff) ->
+            Tuples = get_inserts([Diff])
+          , ydb_plan_node:send_tuples(erlang:self(), Tuples)
+        end
 
-  , ydb_plan_node:send_tuples(erlang:self(), Tuples)
+      , Diffs
+    )
 
   , {ok, State}
 ;

@@ -66,9 +66,14 @@ init(Args) when is_list(Args) -> init(Args, #dstream{}).
 
 %% @doc Extracts the deleted tuples from the diffs.
 delegate({diffs, Diffs}, State = #dstream{}) when is_list(Diffs) ->
-    Tuples = get_deletes(Diffs)
+    lists:foreach(
+        fun (Diff) ->
+            Tuples = get_deletes([Diff])
+          , ydb_plan_node:send_tuples(erlang:self(), Tuples)
+        end
 
-  , ydb_plan_node:send_tuples(erlang:self(), Tuples)
+      , Diffs
+    )
 
   , {ok, State}
 ;
