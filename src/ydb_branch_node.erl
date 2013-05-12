@@ -256,7 +256,7 @@ handle_cast(
     DictSchemas = dict:from_list(Schemas)
   , DictTimestamps = dict:from_list(Timestamps)
 
-  , lists:foreach(
+  , TypedTuples = lists:map(
         fun (Tuple) ->
             Type = erlang:element(1, Tuple) % {**Type, ...}
 
@@ -269,14 +269,36 @@ handle_cast(
               , Tuple
             )
 
-          , handle_cast({notify, Type, {tuples, [NewTuple]}}, State)
+          , {Type, NewTuple}
         end
 
       , Tuples
     )
 
+  , DictTuples = lists:foldl(
+        fun ({Type, Tuple}, Dict) ->
+            dict:append(Type, Tuple, Dict)
+        end
 
-  , {noreply, State}
+      , dict:new()
+      , TypedTuples
+    )
+
+  , NewState = dict:fold(
+        fun (Type, NewTuples, S0) ->
+            {noreply, S1} = handle_cast(
+                {notify, Type, {tuples, NewTuples}}
+              , S0
+            )
+
+          , S1
+        end
+
+      , State
+      , DictTuples
+    )
+
+  , {noreply, NewState}
 ;
 
 handle_cast(_Request, State) ->
