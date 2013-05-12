@@ -38,7 +38,7 @@ send_tuples(PortNo, Data) when is_integer(PortNo) ->
 
 send_tuples(Sock, Data) when is_port(Sock) ->
     if (is_list(Data)) ->
-        gen_tcp:send(Sock, term_to_binary(Data))
+        gen_tcp:send(Sock, bert:encode(Data))
   ; true ->
         {error, {badarg, Data}}
     end
