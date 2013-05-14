@@ -6,95 +6,16 @@
 -module(ydb_aggr_funs).
 
 -export([identity/1]).
--export([get_aggr/1]).
+-export([count_single/2, count_all/1, sum_single/2, sum_all/1,
+         avg_single/2, avg_all/1]).
+-export([min_single/2, min_all/1, max_single/2, max_all/1]).
+-export([var_single/2, var_all/1, stddev_single/2, stddev_all/1]).
+-export([count_priv_single/2, count_priv_all/1]).
 
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
 
-%% @doc Incremental aggregate function table for the partial result
-%%      funs.
--define(PR_FUN_TABLE, dict:from_list([
-    {sum, fun sum_single/2}
-  , {count, fun count_single/2}
-  , {avg, fun avg_single/2}
-  , {min, fun min_single/2}
-  , {max, fun max_single/2}
-  , {stddev, fun stddev_single/2}
-  , {var, fun var_single/2}
-])).
-
-%% @doc Non-incremental aggregate function table for the partial
-%%      result funs.
--define(PR_FUN_NONINCREMENTAL_TABLE, dict:from_list([
-    {sum, {error, invalid_aggregate}}
-  , {count, {error, invalid_aggregate}}
-  , {avg, {error, invalid_aggregate}}
-  , {min, {error, invalid_aggregate}}
-  , {max, {error, invalid_aggregate}}
-  , {stddev, {error, invalid_aggregate}}
-  , {var, {error, invalid_aggregate}}
-])).
-
-%% @doc Partial result funs for private aggregates.
--define(PRIVATE_PR_FUN_TABLE, dict:from_list([
-    {sum, {error, invalid_aggregate}}
-  , {count, fun count_priv_single/2}
-  , {avg, {error, invalid_aggregate}}
-  , {min, {error, invalid_aggregate}}
-  , {max, {error, invalid_aggregate}}
-  , {stddev, {error, invalid_aggregate}}
-  , {var, {error, invalid_aggregate}}
-])).
-
-%% @doc Aggregate function table for the overall aggregate funs.
--define(AGGR_FUN_TABLE, dict:from_list([
-    {sum, fun sum_all/1}
-  , {count, fun count_all/1}
-  , {avg, fun avg_all/1}
-  , {min, fun min_all/1}
-  , {max, fun max_all/1}
-  , {stddev, fun stddev_all/1}
-  , {var, fun var_all/1}
-])).
-
-%% @doc Overall aggregate funs for private aggregates.
--define(PRIVATE_AGGR_FUN_TABLE, dict:from_list([
-    {sum, {error, invalid_aggregate}}
-  , {count, fun count_priv_all/1}
-  , {avg, {error, invalid_aggregate}}
-  , {min, {error, invalid_aggregate}}
-  , {max, {error, invalid_aggregate}}
-  , {stddev, {error, invalid_aggregate}}
-  , {var, {error, invalid_aggregate}}
-])).
-
--record(aggr, {
-    name :: atom()
-  , incremental :: boolean()
-  , private :: boolean()
-}).
-
--type option() ::
-    {name, OperatorName :: atom()}
-  | {incremental, Incremental :: boolean()}
-  | {private, Private :: boolean()}.
-%% Options for the aggregate node:
-%% <ul>
-%%   <li><code>{name, OperatorName}</code> - Name of the aggregate 
-%%       function desired. Can be any one of <code>{sum, count, avg,
-%%       min, max, stddev, var}</code>.</li>
-%%   <li><code>{incremental, Incremental}</code> - Whether or not the
-%%       aggregation to be done is incremental. Is <code>true</code> if
-%%       so, <code>false</code> otherwise.</li>
-%%   <li><code>{private, Private}</code> - Is <code>true</code> if a
-%%       privacy-preserving version of the aggregate function is
-%%       desired. Currently only implemented for <code>count</code> and
-%%       <code>sum</code>.</li>
-%% </ul>
-
-%%% =============================================================== %%%
-%%%  API                                                            %%%
-%%% =============================================================== %%%
+%% ----------------------------------------------------------------- %%
 
 -spec identity([term()]) -> term().
 
@@ -102,65 +23,6 @@
 identity([A]) -> A.
 
 %% ----------------------------------------------------------------- %%
-
--spec get_aggr(Args :: [option()]) -> {
-    PrFun :: fun(([term()]) -> term()) | fun(([term()], [term()]) -> term())
-  , AggrFun :: fun(([term()]) -> term())
-}.
-
-%% @doc Entry point into <code>ydb_aggr_funs</code>. Returns the funs
-%%      necessary to do the desired aggregate function.
-get_aggr(Options) ->
-    find_aggr(Options, #aggr{})
-.
-
--spec find_aggr(Args :: [option()], State :: #aggr{}) -> {
-    PrFun :: fun(([term()]) -> term()) | fun(([term()], [term()]) -> term())
-  , AggrFun :: fun(([term()]) -> term())
-}.
-
-%% @private
-%% @doc Helper function for get_aggr.
-find_aggr([{private, Private} | Args], State = #aggr{}) ->
-    find_aggr(Args, State=#aggr{private=Private})
-;
-
-find_aggr([{incremental, Incremental} | Args], State = #aggr{}) ->
-    find_aggr(Args, State=#aggr{incremental=Incremental})
-;
-
-find_aggr([{name, Name} | Args], State = #aggr{}) ->
-    find_aggr(Args, State=#aggr{name=Name})
-;
-
-find_aggr([], _State = #aggr{
-    private = Private
-  , incremental = Incremental
-  , name = Name
-}) ->
-    % Private operators.
-    if
-        % Private operators.
-        Private == true -> {
-            dict:fetch(Name, ?PRIVATE_PR_FUN_TABLE)
-          , dict:fetch(Name, ?PRIVATE_AGGR_FUN_TABLE)
-        }
-        % Incremental operators.
-      ; Incremental -> {
-            dict:fetch(Name, ?PR_FUN_TABLE)
-          , dict:fetch(Name, ?AGGR_FUN_TABLE)
-        }
-        % Non-incremental operators.
-      ; true ->  {
-            dict:fetch(Name, ?PR_FUN_NONINCREMENTAL_TABLE)
-          , dict:fetch(Name, ?AGGR_FUN_TABLE)
-        }
-    end
-.
-
-%%% =============================================================== %%%
-%%%  private functions                                              %%%
-%%% =============================================================== %%%
 
 -spec count_single(List :: [term()], Previous :: [integer()]) -> integer().
 
@@ -389,7 +251,6 @@ count_priv_all(List) ->
       , NewM :: {number()} | {number(), dict()}
       , Init :: integer()
     }.
-    
 %% @doc Takes in the current partial results for a privacy-preserving
 %%      aggregates and updates the results for an incoming tuple.
 update_private_state(
