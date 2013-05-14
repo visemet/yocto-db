@@ -46,21 +46,20 @@ compute_grouped_schema(Schema, Columns) ->
 %% @doc Splits a list of tuples into groups, depending on the indices
 %%      of the columns to group by. Result is a list of group keys
 %%      (which distinguishes groups), and the list of tuples in each
-%%      group.
+%%      group. Keys are in lexicograhic order.
 split_tuples(Tuples, GroupIndexes) ->
     Mapping = lists:foldl(
         fun(Tuple, Dict) ->
             % Get the group for this tuple.
             GroupKey = get_group_key(Tuple, GroupIndexes)
-          , dict:append(GroupKey, Tuple, Dict)
+          , orddict:append(GroupKey, Tuple, Dict)
         end
-      , dict:new()
+      , orddict:new()
       , Tuples
     )
-  , dict:to_list(Mapping)
-.  
-  
-  
+  , orddict:to_list(Mapping)
+.
+
 -spec get_group_indexes(
     Schema :: ydb_plan_node:ydb_schema()
   , Columns :: [atom()]
@@ -93,61 +92,5 @@ get_group_key(Tuple, GroupIndexes) ->
   , GroupKey = list_to_tuple(ListGroupKey)
   , GroupKey
 .
-
-    
-    
-
-%-spec check_diffs(
-%    Tids :: [ets:tid()]
-%  , State :: group()
-%  , OutTid :: ets:tid()
-%) -> ok.
-
-%% private
-%% doc Reorders the columns in the tuple and then groups them. Outputs
-%%      them in a new diff in lexicographic order.
-%check_diffs(Tids, State, OutTid) ->
-%    {Ins, Dels} = ydb_ets_utils:extract_diffs(Tids)
-  
-    % Do the inserts first.
-%  , PlusDiffs = lists:map(fun(Tuple) ->
-%        reorder_tuple(Tuple, State) end, Ins
-%    )
-%  , SortedPlusDiffs = lists:sort(PlusDiffs)
-%  , lists:foreach(fun(Tuple) ->
-%        ydb_ets_utils:add_diffs(OutTid, '+', group, Tuple) end
-%      , SortedPlusDiffs
-%    )
-%  
-%    % Then do the deletes.
-%  , MinusDiffs = lists:map(fun(Tuple) ->
-%        reorder_tuple(Tuple, State) end, Dels
-%    )
-%  , SortedMinusDiffs = lists:sort(MinusDiffs)
-%%  , lists:foreach(fun(Tuple) ->
-%        ydb_ets_utils:add_diffs(OutTid, '-', group, Tuple) end
-%      , SortedMinusDiffs
-%    )
-%.
-
-%% ----------------------------------------------------------------- %%
-
-%-spec reorder_tuple(
-%    Tuple :: ydb_plan_node:ydb_tuple()
-%  , State :: group()
-%) -> NewTuple :: ydb_plan_node:ydb_tuple().
-
-%% doc Reorders tuple into the correct order determined by the schema
-%%      and grouping specifications.
-%reorder_tuple(
-%    Tuple=#ydb_tuple{data=Data}
-%  , _State=#group{group_indexes=GroupIndexes, other_indexes=OtherIndexes}
-%) ->
-%    NewData = lists:map(fun(Index) ->
-%        element(Index, Data) end, (GroupIndexes ++ OtherIndexes)
-%    )
-%  , NewTuple = Tuple#ydb_tuple{data=list_to_tuple(NewData)}
-%  , NewTuple
-%.
 
 %% ----------------------------------------------------------------- %%
