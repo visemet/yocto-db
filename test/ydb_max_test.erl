@@ -30,6 +30,13 @@ test_setup(Predicate, NumResults, Answer) ->
         {predicate, Predicate}
     ], [{listen, [InPid]}])
     
+    % Get the aggregate functions.
+  , {PrFun, AggrFun} = ydb_aggr_funs:get_aggr([
+        {incremental, true}
+      , {name, max}
+      , {private, false}
+    ])
+    
     % The aggregate setup.
   , {ok, AggrPid} = ydb_aggr_node:start_link([
         {incremental, true}
@@ -37,8 +44,8 @@ test_setup(Predicate, NumResults, Answer) ->
       , {result_name, 'MAX(num)'}
       , {result_type, float}
       , {eval_fun, fun ydb_aggr_funs:identity/1}
-      , {pr_fun, fun ydb_aggr_funs:max_single/2}
-      , {aggr_fun, fun ydb_aggr_funs:max_all/1}
+      , {pr_fun, PrFun}
+      , {aggr_fun, AggrFun}
     ], [{listen, [SelectPid]}])
   , Listener = spawn(?MODULE, handle_results, [self(), NumResults, Answer])
   , ydb_plan_node:add_listener(AggrPid, Listener)
