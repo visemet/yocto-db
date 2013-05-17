@@ -46,6 +46,13 @@ test_setup_helper(Answer, N) ->
       , {poke_freq, 1}
     ], [{schema, Schema}])
 
+    % Get the aggregate functions.
+  , {PrFun, AggrFun} = ydb_aggr_funs:get_aggr([
+        {incremental, true}
+      , {name, avg}
+      , {private, false}
+    ])
+
     % The aggregate setup.
   , {ok, AggrPid} = ydb_aggr_node:start_link([
         {incremental, true}
@@ -53,8 +60,8 @@ test_setup_helper(Answer, N) ->
       , {result_name, 'AVG(num)'}
       , {result_type, float}
       , {eval_fun, fun ydb_aggr_funs:identity/1}
-      , {pr_fun, fun ydb_aggr_funs:avg_single/2}
-      , {aggr_fun, fun ydb_aggr_funs:avg_all/1}
+      , {pr_fun, PrFun}
+      , {aggr_fun, AggrFun}
     ], [{listen, [DummyPid]}])
 
   , Listener = spawn(
