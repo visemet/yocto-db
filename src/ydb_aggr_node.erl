@@ -109,7 +109,7 @@
 %%   <li><code>{grouped, Grouped}</code> - If no grouping id desired,
 %%       is equal to <code>false</code>. Otherwise is a list of
 %%       columm names to group by.</code></li>
-%%   <li><code>{columns, Columns}</code> - Columns to take the 
+%%   <li><code>{columns, Columns}</code> - Columns to take the
 %%       aggregate on.</li>
 %%   <li><code>{result_name, ResultName}</code> - The resulting name
 %%       of the aggregate column.</li>
@@ -201,7 +201,7 @@ delegate({get_schema, Schema}, State = #aggr{grouped=Grouped}) ->
             GroupIndexes=ydb_group:get_group_indexes(Schema, Grouped)
           , NewState = State#aggr{schema=Schema, group_indexes=GroupIndexes}
           , {ok, NewState}
-          
+
       ; Grouped =:= false ->
             NewState = State#aggr{schema=Schema}
           , {ok, NewState}
@@ -259,16 +259,16 @@ compute_schema([InputSchema], #aggr{
 }) ->
     % Inform self of input schema.
     ydb_plan_node:relegate(erlang:self(), {get_schema, InputSchema})
-    
+
     % Get the part of the schema with just the groups.
   , GroupedSchema = ydb_group:compute_grouped_schema(InputSchema, Columns)
   , NumGroupedCols = length(Columns)
-  
+
     % Add on the aggregate column.
   , OutputSchema = GroupedSchema ++ [{Name, {NumGroupedCols + 1, Type}}]
   , {ok, OutputSchema}
 ;
-    
+
 compute_schema(Schemas, #aggr{}) ->
     {error, {badarg, Schemas}}
 .
@@ -378,13 +378,13 @@ make_tuple(Timestamp, Aggr, GroupKey) ->
 make_diff_tuple(TimeDict, ResultDict, GroupKey) ->
     Timestamp = case dict:find(GroupKey, TimeDict) of
         {ok, Time} -> Time
-      
+
       ; error -> undefined
     end
-    
+
   , case dict:find(GroupKey, ResultDict) of
         {ok, Result} -> make_tuple(Timestamp, Result, GroupKey)
-        
+
       ; error -> undefined
     end
 .
@@ -395,7 +395,7 @@ make_diff_tuple(TimeDict, ResultDict, GroupKey) ->
     Tuples :: [ydb_plan_node:ydb_tuple()]
   , Grouped :: ?NO_GROUP | tuple() | [tuple()]
   , State :: aggr()
-) -> 
+) ->
     NewState :: aggr()
 .
 
@@ -412,7 +412,7 @@ process_tuples(
     % the key for the group GroupKey and the list of tuples in that group
     % GroupTuples -> {GroupKey, GroupTuples}.
     ListGroupedTuples = ydb_group:split_tuples(Tuples, GroupIndexes)
-    
+
     % Process each group separately.
   , NewState = lists:foldl(
         fun({GroupKey, GroupTuples}, NewState) ->
@@ -485,12 +485,12 @@ process_diffs(
   , is_list(Grouped)
   ->
   io:format("Tuples: ~w, Grouped: ~w, State: ~w~n~n", [Tuples, Grouped, State]),
-  
+
     % Splits tuples into their groups. Is a list of tuples containing
     % the key for the group GroupKey and the list of tuples in that group
     % GroupTuples -> {GroupKey, GroupTuples}
     ListGroupedTuples = ydb_group:split_tuples(Tuples, GroupIndexes)
-  
+
   , {ok, Tid} = ydb_ets_utils:create_diff_table(?MODULE)
     % Process each group separately.
   , NewState = lists:foldl(
@@ -526,11 +526,11 @@ process_diff_group(
     is_list(Tuples)
   ->
     {NewNums, CurrAggr} = do_update(Tuples, State, Grouped)
-    
+
     % Assumes the tuples are written in ascending order by timestamp.
   , Last = lists:last(Tuples)
   , Timestamp = Last#ydb_tuple.timestamp
-  
+
     % Inform listeners of new results.
   , OldTuple = make_diff_tuple(PrevTimes, PrevResults, Grouped)
   , NewTuple = make_tuple(Timestamp, CurrAggr, Grouped)
@@ -546,7 +546,7 @@ process_diff_group(
       ; NewTuple =:= undefined ->
             pass
     end
-    
+
     % Update previous results.
   , NewState = State#aggr{
         prev_results=dict:store(Grouped, CurrAggr, PrevResults)
@@ -602,7 +602,7 @@ do_update(
 
       ; Incremental =:= false ->
             PartialFun(
-                evaluate_tuples(Tuples, EvalFun, {Columns, Schema})
+                evaluate_tuples(Tuples, EvalFun, {Columns, Schema}), []
             )
     end
 
@@ -743,10 +743,10 @@ get_partials(Synopsis, {ResultName, GroupKey}) ->
 add_partial(Synopsis, Nums, SynopsisKey, Partial) ->
     PrevNum = case dict:find(SynopsisKey, Nums) of
         {ok, Value} -> Value
-        
+
       ; error -> 0
     end
-    
+
   , CurrNum = PrevNum + 1
   , NewNums = dict:store(SynopsisKey, CurrNum, Nums)
   , ets:insert(Synopsis, {{SynopsisKey, CurrNum}, Partial})
