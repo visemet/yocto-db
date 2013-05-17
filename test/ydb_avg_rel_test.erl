@@ -7,7 +7,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include("ydb_plan_node.hrl").
--include("../src/logging.hrl").
+%%-include("../src/logging.hrl").
 
 
 start_link_test() ->
