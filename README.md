@@ -7,7 +7,7 @@ Build & Run
 -----------
 
     rebar clean compile
-    erl -pa ebin
+    erl -pz ebin deps/*/ebin
 
 
 Test
