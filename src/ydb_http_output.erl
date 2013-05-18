@@ -22,7 +22,7 @@
 %% Options for the http output:
 %% <ul>
 %%   <li><code>{address, Address}</code> - String containing the web
-%%       address to send tuples to.</li<
+%%       address to send tuples to.</li>
 %% </ul>
 
 %%% =============================================================== %%%
