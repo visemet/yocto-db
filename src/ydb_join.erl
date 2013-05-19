@@ -133,14 +133,20 @@ delegate(
     _Request = {get_listenees, Listenees}
   , State = #join{}
 ) ->
-    [LeftPid, RightPid] = lists:map(
-        fun (PidFun) when is_function(PidFun, 0) ->
-            PidFun()
-        end
+    IsPid = is_pid(lists:last(Listenees))
+  , if
+        IsPid ->
+            LeftPid = lists:nth(1, Listenees)
+          , RightPid = lists:nth(2, Listenees)
+      ; true ->
+            [LeftPid, RightPid] = lists:map(
+            fun (PidFun) when is_function(PidFun, 0) ->
+                PidFun()
+            end
 
-      , Listenees
-    )
-
+          , Listenees
+        )
+    end
   , {ok, State#join{left_pid=LeftPid, right_pid=RightPid}}
 ;
 
