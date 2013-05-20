@@ -676,6 +676,36 @@ make(
     end
 ;
 
+make(
+    {Type = http_output, Addr, Prev}
+  , History
+  , Result
+) when
+    is_tuple(Prev)
+  , is_list(Result)
+  ->
+    case make(Prev, History, Result) of
+        {ok, {PrevId, NewHistory, NewResult}} ->
+            CurrId = get_id(Type, NewHistory)
+          , Listen = prepare_listen(PrevId)
+
+          , ChildSpec = prepare_child_spec(CurrId, {
+                ydb_http_output, start_link, [
+                    [{address, Addr}]
+                  , [{listen, [Listen]}]
+                ]
+            })
+
+          , {ok, {
+                CurrId
+              , dict:update_counter(Type, 1, NewHistory)
+              , [ChildSpec|NewResult]}
+            }
+
+      ; {error, Reason} -> {error, Reason}
+    end
+;
+
 make(Query, _History, _Result) ->
     {error, {badarg, Query}}
 .
