@@ -7,18 +7,22 @@
 -include_lib("eunit/include/eunit.hrl").
 
 start_link_test() ->
-    ?assert(start_link_test_helper(50, 13, 49))
-  , ?assert(start_link_test_helper(40, 8, 39))
-  , ?assert(start_link_test_helper(90, 40, 89))
-  , ?assert(start_link_test_helper(96, 48, 95))
+    ?assert(start_link_test_helper(50, 13, 49, true))
+  , ?assert(start_link_test_helper(40, 8, 39, true))
+  , ?assert(start_link_test_helper(90, 40, 89, true))
+  , ?assert(start_link_test_helper(96, 48, 95, true))
+  , ?assert(start_link_test_helper(50, 13, 49, false))
+  , ?assert(start_link_test_helper(40, 8, 39, false))
+  , ?assert(start_link_test_helper(90, 40, 89, false))
+  , ?assert(start_link_test_helper(96, 48, 95, false))
 .
 
-start_link_test_helper(LTValue, NumResults, Answer) ->
+start_link_test_helper(LTValue, NumResults, Answer, Incremental) ->
     Predicate = {ydb_cv, num, 'lt', LTValue}
-  , test_setup(Predicate, NumResults, Answer)
+  , test_setup(Predicate, NumResults, Answer, Incremental)
 .
 
-test_setup(Predicate, NumResults, Answer) ->
+test_setup(Predicate, NumResults, Answer, Incremental) ->
     Schema = [{num, {1, int}}]
     % Read from the file.
   , {ok, InPid} = ydb_file_input:start_link([
@@ -32,15 +36,16 @@ test_setup(Predicate, NumResults, Answer) ->
     
     % Get the aggregate functions.
   , {PrFun, AggrFun} = ydb_aggr_funs:get_aggr([
-        {incremental, true}
+        {incremental, Incremental}
       , {name, max}
       , {private, false}
     ])
     
     % The aggregate setup.
   , {ok, AggrPid} = ydb_aggr_node:start_link([
-        {incremental, true}
+        {incremental, Incremental}
       , {columns, [num]}
+      , {history_size, 'infinity'}
       , {result_name, 'MAX(num)'}
       , {result_type, float}
       , {eval_fun, fun ydb_aggr_funs:identity/1}

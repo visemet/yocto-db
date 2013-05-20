@@ -3,11 +3,9 @@
 %% @doc This module tests the AVG aggregate function for relations.
 -module(ydb_avg_rel_test).
 -export([start_link_test_helper/4]).
-%-export([handle_results/3]).
 
 -include_lib("eunit/include/eunit.hrl").
 -include("ydb_plan_node.hrl").
-%%-include("../src/logging.hrl").
 
 
 start_link_test() ->

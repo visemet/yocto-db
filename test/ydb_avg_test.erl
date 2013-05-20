@@ -7,19 +7,24 @@
 -include_lib("eunit/include/eunit.hrl").
 
 start_link_test() ->
-    ?assert(start_link_test_helper(50, 13, 38.69230769))
-  , ?assert(start_link_test_helper(60, 18, 43.5555555556))
-  , ?assert(start_link_test_helper(40, 8, 35.6250))
-  , ?assert(start_link_test_helper(90, 40, 60.850))
-  , ?assert(start_link_test_helper(96, 48, 66.2916667))
+    ?assert(start_link_test_helper(50, 13, 38.69230769, true))
+  , ?assert(start_link_test_helper(60, 18, 43.5555555556, true))
+  , ?assert(start_link_test_helper(40, 8, 35.6250, true))
+  , ?assert(start_link_test_helper(90, 40, 60.850, true))
+  , ?assert(start_link_test_helper(96, 48, 66.2916667, true))
+  , ?assert(start_link_test_helper(50, 13, 38.69230769, false))
+  , ?assert(start_link_test_helper(60, 18, 43.5555555556, false))
+  , ?assert(start_link_test_helper(40, 8, 35.6250, false))
+  , ?assert(start_link_test_helper(90, 40, 60.850, false))
+  , ?assert(start_link_test_helper(96, 48, 66.2916667, false))
 .
 
-start_link_test_helper(LTValue, NumResults, Answer) ->
+start_link_test_helper(LTValue, NumResults, Answer, Incremental) ->
     Predicate = {ydb_cv, num, 'lt', LTValue}
-  , test_setup(Predicate, NumResults, Answer)
+  , test_setup(Predicate, NumResults, Answer, Incremental)
 .                                             
 
-test_setup(Predicate, NumResults, Answer) ->
+test_setup(Predicate, NumResults, Answer, Incremental) ->
     Schema = [{num, {1, int}}]
     % Read from the file.
   , {ok, InPid} = ydb_file_input:start_link([
@@ -33,15 +38,16 @@ test_setup(Predicate, NumResults, Answer) ->
     
     % Get the aggregate functions.
   , {PrFun, AggrFun} = ydb_aggr_funs:get_aggr([
-        {incremental, true}
+        {incremental, Incremental}
       , {name, avg}
       , {private, false}
     ])
     
     % The aggregate setup.
   , {ok, AggrPid} = ydb_aggr_node:start_link([
-        {incremental, true}
+        {incremental, Incremental}
       , {columns, [num]}
+      , {history_size, 'infinity'}
       , {result_name, 'AVG(num)'}
       , {result_type, float}
       , {eval_fun, fun ydb_aggr_funs:identity/1}

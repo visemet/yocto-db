@@ -172,8 +172,9 @@ count_single(List, []) ->
 ;
 
 % Incremental version.
-count_single(List, [Prev]) ->
-    Prev + erlang:length(List)
+count_single(List, Prev) ->
+    PrevCount = lists:last(Prev)
+  , PrevCount + erlang:length(List)
 .
 
 -spec count_all_nonincremental(List :: [term()]) -> integer().
@@ -203,8 +204,9 @@ sum_single(List, []) ->
 ;
 
 % Incremental version.
-sum_single(List, [Prev]) ->
-    Prev + lists:sum(List)
+sum_single(List, Prev) ->
+    PrevSum = lists:last(Prev)
+  , PrevSum + lists:sum(List)
 .
 
 -spec sum_all_nonincremental(List :: [term()]) -> integer().
@@ -225,7 +227,7 @@ sum_all_incremental(List) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec avg_single(List :: [term()], Previous :: [integer()]) -> term().
+-spec avg_single(List :: [term()], Previous :: [term()]) -> term().
 
 %% @doc Computes the average over a single diff. This is the
 %%      PartialFun for the non-incremental version.
@@ -234,11 +236,12 @@ avg_single(List, []) ->
 ;
 
 % Incremental version.
-avg_single(List, [{PrevCount, PrevSum}]) ->
-    {erlang:length(List) + PrevCount, lists:sum(List) + PrevSum}
+avg_single(List, Prev) ->
+    {PrevCount, PrevSum} = lists:last(Prev)
+  , {erlang:length(List) + PrevCount, lists:sum(List) + PrevSum}
 .
 
--spec avg_all_nonincremental(List :: [term()]) -> integer().
+-spec avg_all_nonincremental(List :: [number()]) -> float().
 
 %% @doc Computes the average over all the diffs. This is the AggrFun
 %%      for the non-incremental version.
@@ -250,10 +253,11 @@ avg_all_nonincremental(List) ->
       , {0, 0}
       , List
     )
+ % , io:format("Totalsum: ~w, ToalCount:~w~n~n", [TotalSum, TotalCount])
   , TotalSum / TotalCount
 .
 
--spec avg_all_incremental(List :: [term()]) -> term().
+-spec avg_all_incremental(List :: [number()]) -> float().
 
 %% @doc Computes the average over all the diffs. This is the AggrFun
 %%      for the incremental version.
@@ -273,8 +277,8 @@ min_single(List, []) ->
 ;
 
 % Incremental version.
-min_single(List, [Prev]) ->
-    min(lists:min(List), Prev)
+min_single(List, Prev) ->
+    min(lists:min(List), lists:min(Prev))
 .
 
 -spec min_all_nonincremental(List :: [term()]) -> term().
@@ -304,8 +308,8 @@ max_single(List, []) ->
 ;
 
 % Incremental version.
-max_single(List, [Prev]) ->
-    max(lists:max(List), Prev)
+max_single(List, Prev) ->
+    max(lists:max(List), lists:max(Prev))
 .
 
 -spec max_all_nonincremental(List :: [term()]) -> term().
@@ -339,15 +343,16 @@ var_single(List, []) ->
 ;
 
 % Incremental version.
-var_single(List, [{PrevCount, PrevSum, PrevSumSq}]) ->
-    {
+var_single(List, Prev) ->
+    {PrevCount, PrevSum, PrevSumSq} = lists:last(Prev)
+  , {
         erlang:length(List) + PrevCount
       , lists:sum(List) + PrevSum
       , lists:sum(lists:map(fun(X) -> X * X end, List)) + PrevSumSq
     }
 .
 
--spec var_all_nonincremental(List :: [term()]) -> integer().
+-spec var_all_nonincremental(List :: [term()]) -> term().
 
 %% @doc Computes the population variance over all the diffs. This is
 %%      the AggrFun for the non-incremental version.
@@ -390,8 +395,9 @@ stddev_single(List, []) ->
 ;
 
 % Incremental version.
-stddev_single(List, [{PrevCount, PrevSum, PrevSumSq}]) ->
-    {
+stddev_single(List, Prev) ->
+    {PrevCount, PrevSum, PrevSumSq} = lists:last(Prev)
+  , {
         erlang:length(List) + PrevCount
       , lists:sum(List) + PrevSum
       , lists:sum(lists:map(fun(X) -> X * X end, List)) + PrevSumSq
