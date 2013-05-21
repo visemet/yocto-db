@@ -7,7 +7,6 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("ydb_plan_node.hrl").
 
-
 start_link_test() ->
     {Diff1, Diff2, Diff3} = get_diff_tables()
   , {Out1, Out12, Out123} = get_diff_tuples()

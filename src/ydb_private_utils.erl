@@ -5,7 +5,8 @@
 %%      differentially-private queries.
 -module(ydb_private_utils).
 
--export([do_bounded_advance/6, do_logarithmic_advance/5]).
+-export([do_bounded_advance/6, do_logarithmic_advance/5
+       , do_bounded_sum_advance/5]).
 -export([random_laplace/1]).
 
 %%% =============================================================== %%%
@@ -48,6 +49,39 @@ do_logarithmic_advance(
             NumSteps = num_steps(CurrTime, NewTime)
           , NewLT = add_inveps_noise(CurrL, Eps, NumSteps)
           , {NewLT + Sigma, NewLT}
+    end
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec do_bounded_sum_advance(
+    CurrMState :: {number()} | {number(), dict()}
+  , CurrTime :: integer()
+  , NewTime :: integer()
+  , Sigma :: number()
+  , Eps :: number()
+) -> {NewM :: number()} | {NewM :: number(), NewFreqs :: dict()}.
+
+%% @doc Advances the bounded mechanism to time NewTime with value
+%%      Sigma, first resetting the state if necessary.
+%%
+%%      Implements the following logic:
+%%        if (NewTime &lt; get_next_power(CurrTime))
+%%            do regular advance
+%%        elseif is_power_of_two(NewTime)
+%%            reset mechanism state
+%%        else
+%%            reset mechanism state
+%%            do advance with this (reset) state
+do_bounded_sum_advance(undefined, C, N, S, E) ->
+    do_bounded_sum_advance({0, dict:new()}, C, N, S, E)
+;
+
+do_bounded_sum_advance(CurrMState, CurrTime, NewTime, Sigma, Eps) ->
+    case get_case(CurrTime, NewTime) of
+        1 -> do_binary_sum_advance(CurrMState, NewTime, Sigma, Eps)
+      ; 2 -> {0, dict:new()}
+      ; 3 -> do_binary_sum_advance({0, dict:new()}, NewTime, Sigma, Eps)
     end
 .
 
@@ -129,6 +163,28 @@ random_laplace(B) ->
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
+-spec do_binary_sum_advance(
+    CurrMState :: {number(), dict()}
+  , NewTime :: integer()
+  , Sigma :: number()
+  , Eps :: number()
+) -> {NewM :: number(), NewFreqs :: dict()}.
+
+%% @doc Adds a count of Sigma at time NewTime to the binary
+%%      frequency table, and returns the new noisy count at NewTime as
+%%      well as the new table. This is not pan-private, since the real
+%%      values are stored in the frequency table.
+do_binary_sum_advance(_State = {_CurrM, Freqs}, NewTime, Sigma, Eps) ->
+    T = get_prev_power(NewTime)
+  , Tau = NewTime - T
+  , EpsPrime = Eps/(math:log(T)/math:log(2) + 1)
+  , NewFreqs = store_bit_frequency(Tau, Sigma, Freqs, EpsPrime)
+  , NewM = get_bit_frequency(Tau, NewFreqs)
+  , {NewM, NewFreqs}
+.
+
+%% ----------------------------------------------------------------- %%
+
 -spec do_binary_advance(
     CurrMState :: {number(), dict()}
   , NewTime :: integer()
@@ -143,7 +199,7 @@ random_laplace(B) ->
 do_binary_advance(_State = {_CurrM, Freqs}, NewTime, Sigma, Eps) ->
     T = get_prev_power(NewTime)
   , Tau = NewTime - T
-  , EpsPrime = Eps/T
+  , EpsPrime = Eps/(math:log(T)/math:log(2))
   , NewFreqs = store_bit_frequency(Tau, Sigma, Freqs, EpsPrime)
   , NewM = get_bit_frequency(Tau, NewFreqs)
   , {NewM, NewFreqs}

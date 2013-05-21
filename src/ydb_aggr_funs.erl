@@ -25,7 +25,7 @@
 
 %% Partial result funs for private aggregates.
 -define(PRIVATE_PR_FUN_TABLE, dict:from_list([
-    {sum, {error, invalid_aggregate}}
+    {sum, fun sum_priv_single/2}
   , {count, fun count_priv_single/2}
   , {avg, {error, invalid_aggregate}}
   , {min, {error, invalid_aggregate}}
@@ -60,7 +60,7 @@
 
 %% Overall aggregate funs for private aggregates.
 -define(PRIVATE_AGGR_FUN_TABLE, dict:from_list([
-    {sum, {error, invalid_aggregate}}
+    {sum, fun sum_priv_all/1}
   , {count, fun count_priv_all/1}
   , {avg, {error, invalid_aggregate}}
   , {min, {error, invalid_aggregate}}
@@ -460,14 +460,14 @@ stddev_all_incremental(List) ->
 %%      {Data, Timestamp, Options={Epsilon, Mechanism}}
 count_priv_single(List = [{_Data, Timestamp, _Opts} | _Rest], []) ->
     lists:foldl(
-        fun(Tuple, Partial) -> update_private_state(Tuple, Partial) end
+        fun(Tuple, Partial) -> update_private_state(Tuple, Partial, count) end
       , {0, 0, 0, undefined, Timestamp - 1}
       , List
     )
 ;
 count_priv_single(List, [Prev={_Time, _L, _LT, _M, _Init}]) ->
     lists:foldl(
-        fun(Tuple, Partial) -> update_private_state(Tuple, Partial) end
+        fun(Tuple, Partial) -> update_private_state(Tuple, Partial, count) end
       , Prev
       , List
     )
@@ -483,6 +483,52 @@ count_priv_all(List) ->
 
 %% ----------------------------------------------------------------- %%
 
+-spec sum_priv_single(
+    List :: [{term(), integer(), {number(), atom()}}]
+  , Previous :: [{
+        integer()
+      , number()
+      , number()
+      , {number()} | {number(), dict()}
+      , integer()
+    }]
+) ->
+    {
+        NewTime :: integer()
+      , NewL :: number()
+      , NewLT :: number()
+      , NewM :: {number()} | {number(), dict()}
+      , Init :: integer()
+    }.
+
+%% @doc Computes the count over a single diff. This is the
+%%      PartialFun. Expects List to be a list of tuples of the form
+%%      {Data, Timestamp, Options={Epsilon, Mechanism}}
+sum_priv_single(List = [{_Data, Timestamp, _Opts} | _Rest], []) ->
+    lists:foldl(
+        fun(Tuple, Partial) -> update_private_state(Tuple, Partial, sum) end
+      , {0, 0, 0, undefined, Timestamp - 1}
+      , List
+    )
+;
+sum_priv_single(List, [Prev={_Time, _L, _LT, _M, _Init}]) ->
+    lists:foldl(
+        fun(Tuple, Partial) -> update_private_state(Tuple, Partial, sum) end
+      , Prev
+      , List
+    )
+.
+
+-spec sum_priv_all(List :: [term()]) -> term().
+
+%% @doc Computes the count over all the diffs. This is the AggrFun.
+sum_priv_all(List) ->
+    {_Time, _L, LT, M, _Init} = lists:last(List) % get the NewPartial
+  , round(LT + element(1, M))
+.
+
+%% ----------------------------------------------------------------- %%
+
 -spec update_private_state(
     New :: {term(), integer(), {number(), atom()}}
   , Partial :: {
@@ -492,6 +538,7 @@ count_priv_all(List) ->
       , {number()} | {number(), dict()}
       , integer()
     }
+  , Aggr :: atom()
 ) ->
     {
         NewTime :: integer()
@@ -506,12 +553,27 @@ count_priv_all(List) ->
 update_private_state(
     _New={_Data, Timestamp, _Options={Eps, Mech}}
   , _Partial={Time, L, LT, M, Init}
+  , count
 ) ->
     NewTime = Timestamp - Init
   , Sigma = 1
   , {NewL, NewLT} = ydb_private_utils:do_logarithmic_advance(
         {L, LT}, Time, NewTime, Sigma, Eps/2)
   , NewM = ydb_private_utils:do_bounded_advance(
+        M, Time, NewTime, Sigma, Eps/2, Mech)
+  , {NewTime, NewL, NewLT, NewM, Init}
+;
+
+update_private_state(
+    _New={_Data, Timestamp, _Options={Eps, Mech}}
+  , _Partial={Time, L, LT, M, Init}
+  , sum
+) ->
+    NewTime = Timestamp - Init
+  , Sigma = 1
+  , {NewL, NewLT} = ydb_private_utils:do_logarithmic_advance(
+        {L, LT}, Time, NewTime, Sigma, Eps/2)
+  , NewM = ydb_private_utils:do_bounded_sum_advance(
         M, Time, NewTime, Sigma, Eps/2, Mech)
   , {NewTime, NewL, NewLT, NewM, Init}
 .
