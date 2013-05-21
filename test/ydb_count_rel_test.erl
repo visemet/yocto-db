@@ -1,7 +1,7 @@
 %% @author Kalpana Suraesh <ksuraesh@caltech.edu>
 
-%% @doc This module tests the AVG aggregate function for relations.
--module(ydb_avg_rel_test).
+%% @doc This module tests the COUNT aggregate function for relations.
+-module(ydb_count_rel_test).
 -export([start_link_test_helper/4]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -46,7 +46,7 @@ test_setup_helper(Answer, N) ->
     % Get the aggregate functions.
   , {PrFun, AggrFun} = ydb_aggr_funs:get_aggr([
         {incremental, false}
-      , {name, avg}
+      , {name, count}
       , {private, false}
     ])
 
@@ -54,7 +54,7 @@ test_setup_helper(Answer, N) ->
   , {ok, AggrPid} = ydb_aggr_node:start_link([
         {incremental, false}
       , {columns, [num]}
-      , {result_name, 'AVG(num)'}
+      , {result_name, 'COUNT(num)'}
       , {result_type, float}
       , {eval_fun, fun ydb_aggr_funs:identity/1}
       , {pr_fun, PrFun}
@@ -94,24 +94,16 @@ start_link_test_helper(Pid, Count, NumResults, Answer) ->
 
 extract_tuples(DiffTid) ->
     {Ins, Dels} = ydb_ets_utils:extract_diffs([DiffTid])
-  , {lists:sort(rnd(Ins)), lists:sort(rnd(Dels))}
-.
-
-rnd(Tuples) when is_list(Tuples) ->
-    lists:map(fun(X) -> rnd(X) end, Tuples)
-;
-rnd(Tuple=#ydb_tuple{data=Data}) ->
-    {Val} = Data
-  , Tuple#ydb_tuple{data={round(Val*10)/10}}
+  , {lists:sort(Ins), lists:sort(Dels)}
 .
 
 % expected output from ydb_ets_utils:extract_diffs/1
 get_diff_tuples() ->
     % {[InsertTuples], [DeleteTuples]}
     % there's probably only one of each.
-    Table1 = {[{ydb_tuple,2,{6.0}}], []}
-  , Table2 = {[{ydb_tuple,3,{8.0}}],[{ydb_tuple,2,{6.0}}]}
-  , Table3 = {[{ydb_tuple,4,{6.5}}],[{ydb_tuple,3,{8.0}}]}
+    Table1 = {[{ydb_tuple,2,{2}}], []}
+  , Table2 = {[{ydb_tuple,3,{3}}],[{ydb_tuple,2,{2}}]}
+  , Table3 = {[{ydb_tuple,4,{4}}],[{ydb_tuple,3,{3}}]}
   , {Table1, Table2, Table3}
 .
 

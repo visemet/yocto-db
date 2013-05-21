@@ -1,8 +1,9 @@
 %% @author Kalpana Suraesh <ksuraesh@caltech.edu>
 
-%% @doc This module tests the AVG aggregate function for relations.
--module(ydb_avg_rel_test).
+%% @doc This module tests the SUM aggregate function for relations.
+-module(ydb_sum_rel_test).
 -export([start_link_test_helper/4]).
+%-export([handle_results/3]).
 
 -include_lib("eunit/include/eunit.hrl").
 -include("ydb_plan_node.hrl").
@@ -46,7 +47,7 @@ test_setup_helper(Answer, N) ->
     % Get the aggregate functions.
   , {PrFun, AggrFun} = ydb_aggr_funs:get_aggr([
         {incremental, false}
-      , {name, avg}
+      , {name, sum}
       , {private, false}
     ])
 
@@ -54,12 +55,12 @@ test_setup_helper(Answer, N) ->
   , {ok, AggrPid} = ydb_aggr_node:start_link([
         {incremental, false}
       , {columns, [num]}
-      , {result_name, 'AVG(num)'}
+      , {result_name, 'SUM(num)'}
       , {result_type, float}
       , {eval_fun, fun ydb_aggr_funs:identity/1}
       , {pr_fun, PrFun}
       , {aggr_fun, AggrFun}
-      , {history_size, 2}
+      , {history_size, 1}
     ], [{listen, [DummyPid]}])
 
   , Listener = spawn(
@@ -102,31 +103,31 @@ rnd(Tuples) when is_list(Tuples) ->
 ;
 rnd(Tuple=#ydb_tuple{data=Data}) ->
     {Val} = Data
-  , Tuple#ydb_tuple{data={round(Val*10)/10}}
+  , Tuple#ydb_tuple{data={round(Val)}}
 .
 
 % expected output from ydb_ets_utils:extract_diffs/1
 get_diff_tuples() ->
     % {[InsertTuples], [DeleteTuples]}
     % there's probably only one of each.
-    Table1 = {[{ydb_tuple,2,{6.0}}], []}
-  , Table2 = {[{ydb_tuple,3,{8.0}}],[{ydb_tuple,2,{6.0}}]}
-  , Table3 = {[{ydb_tuple,4,{6.5}}],[{ydb_tuple,3,{8.0}}]}
+    Table1 = {[{ydb_tuple,2,{13}}],[]}
+  , Table2 = {[{ydb_tuple,3,{18}}],[{ydb_tuple,2,{13}}]}
+  , Table3 = {[{ydb_tuple,4,{12}}],[{ydb_tuple,3,{18}}]}
   , {Table1, Table2, Table3}
 .
 
 get_diff_tables() ->
     Diff1 = ets:new(diff1, [bag])
   , ets:insert(Diff1, {'+', {row, 1}, {ydb_tuple, 1, {3}}})
-  , ets:insert(Diff1, {'+', {row, 2}, {ydb_tuple, 2, {9}}})
+  , ets:insert(Diff1, {'+', {row, 2}, {ydb_tuple, 2, {10}}})
 
   , Diff2 = ets:new(diff2, [bag])
-  , ets:insert(Diff2, {'+', {row, 3}, {ydb_tuple, 3, {12}}})
+  , ets:insert(Diff2, {'+', {row, 3}, {ydb_tuple, 3, {5}}})
 
   , Diff3 = ets:new(diff3, [bag])
   , ets:insert(Diff3, {'-', {row, 1}, {ydb_tuple, 1, {3}}})
-  , ets:insert(Diff3, {'-', {row, 2}, {ydb_tuple, 2, {9}}})
-  , ets:insert(Diff3, {'+', {row, 4}, {ydb_tuple, 4, {2}}})
+  , ets:insert(Diff3, {'-', {row, 2}, {ydb_tuple, 2, {10}}})
+  , ets:insert(Diff3, {'+', {row, 4}, {ydb_tuple, 4, {7}}})
 
   , {Diff1, Diff2, Diff3}
 .
