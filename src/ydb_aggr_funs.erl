@@ -8,6 +8,7 @@
 -export([identity/1]).
 -export([get_aggr/1]).
 -export([max_single/2]).
+-export([make_private/3]).
 
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
@@ -436,6 +437,27 @@ stddev_all_incremental(List) ->
 .
 
 %% ----------------------------------------------------------------- %%
+
+
+-spec make_private(
+    EvalFun :: fun(([term()]) -> term())
+  , Epsilon :: number()
+  , Mechanism :: atom()
+) -> fun(([term()]) -> term()).
+
+%% @doc Takes in an existing eval_fun and returns the output required
+%%      to evaluate that output in a privacy-preserving manner. This
+%%      is the EvalFun for privacy-preserving aggregates. For an
+%%      eval_fun that produces a value Data, this will return a fun
+%%      that produces a tuple of the form:
+%%          {Data, Timestamp, Options={Epsilon, Mechanism}}.
+%%      The list of terms passed to the resulting fun to be evaluated
+%%      are expected to be prefixed with the timestamp.
+make_private(EvalFun, Epsilon, Mechanism) ->
+    fun(_X=[TS|Cols]) ->
+        {EvalFun(Cols), TS, {Epsilon, Mechanism}}
+    end
+.
 
 -spec count_priv_single(
     List :: [{term(), integer(), {number(), atom()}}]

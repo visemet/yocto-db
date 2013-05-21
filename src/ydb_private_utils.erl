@@ -6,7 +6,7 @@
 -module(ydb_private_utils).
 
 -export([do_bounded_advance/6, do_logarithmic_advance/5
-       , do_bounded_sum_advance/5]).
+       , do_bounded_sum_advance/6]).
 -export([random_laplace/1]).
 
 %%% =============================================================== %%%
@@ -60,6 +60,7 @@ do_logarithmic_advance(
   , NewTime :: integer()
   , Sigma :: number()
   , Eps :: number()
+  , Mechanism :: 'binary'
 ) -> {NewM :: number()} | {NewM :: number(), NewFreqs :: dict()}.
 
 %% @doc Advances the bounded mechanism to time NewTime with value
@@ -73,11 +74,11 @@ do_logarithmic_advance(
 %%        else
 %%            reset mechanism state
 %%            do advance with this (reset) state
-do_bounded_sum_advance(undefined, C, N, S, E) ->
-    do_bounded_sum_advance({0, dict:new()}, C, N, S, E)
+do_bounded_sum_advance(undefined, C, N, S, E, 'binary') ->
+    do_bounded_sum_advance({0, dict:new()}, C, N, S, E, 'binary')
 ;
 
-do_bounded_sum_advance(CurrMState, CurrTime, NewTime, Sigma, Eps) ->
+do_bounded_sum_advance(CurrMState, CurrTime, NewTime, Sigma, Eps, 'binary') ->
     case get_case(CurrTime, NewTime) of
         1 -> do_binary_sum_advance(CurrMState, NewTime, Sigma, Eps)
       ; 2 -> {0, dict:new()}
