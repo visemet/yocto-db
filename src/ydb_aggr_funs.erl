@@ -480,15 +480,18 @@ make_private(EvalFun, Epsilon, Mechanism) ->
 %% @doc Computes the count over a single diff. This is the
 %%      PartialFun. Expects List to be a list of tuples of the form
 %%      {Data, Timestamp, Options={Epsilon, Mechanism}}
-count_priv_single(List = [{_Data, Timestamp, _Opts} | _Rest], []) ->
-    lists:foldl(
+count_priv_single(List, []) ->
+    {_Data, Timestamp, _Opts} = lists:last(List)
+  , lists:foldl(
         fun(Tuple, Partial) -> update_private_state(Tuple, Partial, count) end
       , {0, 0, 0, undefined, Timestamp - 1}
       , List
     )
 ;
-count_priv_single(List, [Prev={_Time, _L, _LT, _M, _Init}]) ->
-    lists:foldl(
+
+count_priv_single(List, PrevList) ->
+    Prev = lists:last(PrevList)
+  , lists:foldl(
         fun(Tuple, Partial) -> update_private_state(Tuple, Partial, count) end
       , Prev
       , List
