@@ -62,7 +62,7 @@ handler(Pid, Answers, Count) ->
 test_setup(Aggregate, Answers) ->
     Schema = [{stock, {1, string}}, {days, {2, int}}, {price, {3, double}}]
   , {ok, InPid} = ydb_file_input:start_link([
-        {filename, "../data/project_test_helper.dta"}
+        {filename, "../test/data/project_test_helper.dta"}
       , {batch_size, 100}
       , {poke_freq, 1}
     ], [{schema, Schema}])

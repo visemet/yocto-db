@@ -7,7 +7,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 read_test() ->
-    Filename = "../data/read_test_helper.dta"
+    Filename = "../test/data/read_test_helper.dta"
   , ?assertMatch(
         {done, [5,4,3,2,1]}
       , ydb_file_input:read(none, -1, [1,2,3,4,5])

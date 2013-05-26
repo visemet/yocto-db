@@ -28,7 +28,7 @@ test_setup(Predicate, NumResults, Answer, Incremental) ->
     Schema = [{num, {1, int}}]
     % Read from the file
   , {ok, InPid} = ydb_file_input:start_link([
-        {filename, "../data/select_test_helper.dta"}
+        {filename, "../test/data/select_test_helper.dta"}
       , {batch_size, 100}
       , {poke_freq, 1}
     ], [{schema, Schema}])

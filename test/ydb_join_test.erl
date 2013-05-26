@@ -17,7 +17,7 @@ test_setup(Handler) ->
   , Predicate = {ydb_cv, num, 'gt', 0}
 
   , {ok, DummyPid} = ydb_file_input:start_link([
-        {filename, "../data/select_test_helper.dta"}
+        {filename, "../test/data/select_test_helper.dta"}
       , {batch_size, 100}
       , {poke_freq, 1}
     ], [{schema, Schema}])
