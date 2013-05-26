@@ -41,7 +41,7 @@ test_setup(Predicate, NumResults, Answer) ->
     
     % Get the evaluation function.
   , EvalFun = ydb_aggr_funs:make_private(
-        fun ydb_aggr_funs:identity/1, 0.01, 'binary'
+        fun ydb_aggr_funs:identity/1, 0.01, 'binary', 1
     )
     
     % The aggregate setup.

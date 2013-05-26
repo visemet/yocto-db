@@ -8,7 +8,7 @@
 -export([identity/1]).
 -export([get_aggr/1]).
 -export([max_single/2]).
--export([make_private/3]).
+-export([make_private/4]).
 
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
@@ -28,7 +28,7 @@
 -define(PRIVATE_PR_FUN_TABLE, dict:from_list([
     {sum, fun sum_priv_single/2}
   , {count, fun count_priv_single/2}
-  , {avg, {error, invalid_aggregate}}
+  , {avg, fun avg_priv_single/2}
   , {min, {error, invalid_aggregate}}
   , {max, {error, invalid_aggregate}}
   , {stddev, {error, invalid_aggregate}}
@@ -63,7 +63,7 @@
 -define(PRIVATE_AGGR_FUN_TABLE, dict:from_list([
     {sum, fun sum_priv_all/1}
   , {count, fun count_priv_all/1}
-  , {avg, {error, invalid_aggregate}}
+  , {avg, fun avg_priv_all/1}
   , {min, {error, invalid_aggregate}}
   , {max, {error, invalid_aggregate}}
   , {stddev, {error, invalid_aggregate}}
@@ -438,11 +438,11 @@ stddev_all_incremental(List) ->
 
 %% ----------------------------------------------------------------- %%
 
-
 -spec make_private(
     EvalFun :: fun(([term()]) -> term())
   , Epsilon :: number()
   , Mechanism :: atom()
+  , MinInterval :: integer()
 ) -> fun(([term()]) -> term()).
 
 %% @doc Takes in an existing eval_fun and returns the output required
@@ -450,17 +450,19 @@ stddev_all_incremental(List) ->
 %%      is the EvalFun for privacy-preserving aggregates. For an
 %%      eval_fun that produces a value Data, this will return a fun
 %%      that produces a tuple of the form:
-%%          {Data, Timestamp, Options={Epsilon, Mechanism}}.
+%%          {Data, Timestamp, Options={Epsilon, Mechanism, MinInterval}}.
 %%      The list of terms passed to the resulting fun to be evaluated
 %%      are expected to be prefixed with the timestamp.
-make_private(EvalFun, Epsilon, Mechanism) ->
-    fun(_X=[TS|Cols]) ->
-        {EvalFun(Cols), TS, {Epsilon, Mechanism}}
+make_private(EvalFun, Epsilon, Mechanism, MinInterval) ->
+    fun([TS | Cols]) ->
+        {EvalFun(Cols), TS, {Epsilon, Mechanism, MinInterval}}
     end
 .
 
+%% ----------------------------------------------------------------- %%
+
 -spec count_priv_single(
-    List :: [{term(), integer(), {number(), atom()}}]
+    List :: [{term(), integer(), {number(), atom(), integer()}}]
   , Previous :: [{
         integer()
       , number()
@@ -479,12 +481,12 @@ make_private(EvalFun, Epsilon, Mechanism) ->
 
 %% @doc Computes the count over a single diff. This is the
 %%      PartialFun. Expects List to be a list of tuples of the form
-%%      {Data, Timestamp, Options={Epsilon, Mechanism}}
+%%      {Data, Timestamp, Options={Epsilon, Mechanism, MinInterval}}
 count_priv_single(List, []) ->
-    {_Data, Timestamp, _Opts} = lists:last(List)
+    {_Data, Timestamp, {_Eps, _Mech, MinInterval}} = lists:nth(1, List)
   , lists:foldl(
         fun(Tuple, Partial) -> update_private_state(Tuple, Partial, count) end
-      , {0, 0, 0, undefined, Timestamp - 1}
+      , {0, 0, 0, undefined, Timestamp - MinInterval}
       , List
     )
 ;
@@ -502,14 +504,14 @@ count_priv_single(List, PrevList) ->
 
 %% @doc Computes the count over all the diffs. This is the AggrFun.
 count_priv_all(List) ->
-    {_Time, _L, LT, M, _Init} = lists:last(List) % get the NewPartial
+    {_Time, _L, LT, M, _Init} = lists:last(List)
   , round(LT + element(1, M))
 .
 
 %% ----------------------------------------------------------------- %%
 
 -spec sum_priv_single(
-    List :: [{term(), integer(), {number(), atom()}}]
+    List :: [{term(), integer(), {number(), atom(), integer()}}]
   , Previous :: [{
         integer()
       , number()
@@ -526,14 +528,14 @@ count_priv_all(List) ->
       , Init :: integer()
     }.
 
-%% @doc Computes the count over a single diff. This is the
+%% @doc Computes the sum over a single diff. This is the
 %%      PartialFun. Expects List to be a list of tuples of the form
-%%      {Data, Timestamp, Options={Epsilon, Mechanism}}
+%%      {Data, Timestamp, Options={Epsilon, Mechanism, MinInterval}}
 sum_priv_single(List, []) ->
-    {_Data, Timestamp, _Opts} = lists:last(List)
+    {_Data, Timestamp, {_Eps, _Mech, MinInterval}} = lists:last(List)
   , lists:foldl(
         fun(Tuple, Partial) -> update_private_state(Tuple, Partial, sum) end
-      , {0, 0, 0, undefined, Timestamp - 1}
+      , {0, 0, 0, undefined, Timestamp - MinInterval}
       , List
     )
 ;
@@ -549,16 +551,66 @@ sum_priv_single(List, PrevList) ->
 
 -spec sum_priv_all(List :: [term()]) -> term().
 
-%% @doc Computes the count over all the diffs. This is the AggrFun.
+%% @doc Computes the sum over all the diffs. This is the AggrFun.
 sum_priv_all(List) ->
-    {_Time, _L, LT, M, _Init} = lists:last(List) % get the NewPartial
+    {_Time, _L, LT, M, _Init} = lists:last(List)
+  , round(LT + element(1, M))
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec avg_priv_single(
+    List :: [{term(), integer(), {number(), atom(), integer()}}]
+  , Previous :: [{
+        integer()
+      , number()
+      , number()
+      , {number()} | {number(), dict()}
+      , integer()
+    }]
+) ->
+    {
+        NewTime :: integer()
+      , NewL :: number()
+      , NewLT :: number()
+      , NewM :: {number()} | {number(), dict()}
+      , Init :: integer()
+    }.
+
+%% @doc Computes the average over a single diff. This is the
+%%      PartialFun. Expects List to be a list of tuples of the form
+%%      {Data, Timestamp, Options={Epsilon, Mechanism, MinInterval}}
+avg_priv_single(List, []) ->
+    {_Data, Timestamp, {_Eps, _Mech, MinInterval}} = lists:last(List)
+  , lists:foldl(
+        fun(Tuple, Partial) -> update_private_state(Tuple, Partial, avg) end
+      , {0, 0, 0, undefined, Timestamp - MinInterval}
+      , List
+    )
+;
+
+avg_priv_single(List, PrevList) ->
+    Prev = lists:last(PrevList)
+  , lists:foldl(
+        fun(Tuple, Partial) -> update_private_state(Tuple, Partial, avg) end
+      , Prev
+      , List
+    )
+.
+
+-spec avg_priv_all(List :: [term()]) -> term().
+
+%% @doc Computes the average over all the diffs. This is the AggrFun.
+avg_priv_all(List) ->
+% TODO: make this actually do the average
+    {_Time, _L, LT, M, _Init} = lists:last(List)
   , round(LT + element(1, M))
 .
 
 %% ----------------------------------------------------------------- %%
 
 -spec update_private_state(
-    New :: {term(), integer(), {number(), atom()}}
+    New :: {term(), integer(), {number(), atom(), integer()}}
   , Partial :: {
         integer()
       , number()
@@ -579,29 +631,22 @@ sum_priv_all(List) ->
 %% @doc Takes in the current partial results for a privacy-preserving
 %%      aggregates and updates the results for an incoming tuple.
 update_private_state(
-    _New={_Data, Timestamp, _Options={Eps, Mech}}
+    _New={_Data, Timestamp, _Options={Eps, Mech, MinInterval}}
   , _Partial={Time, L, LT, M, Init}
-  , count
+  , Aggr
 ) ->
-    NewTime = Timestamp - Init
+    NewTime = trunc((Timestamp - Init) / MinInterval)
   , Sigma = 1
   , {NewL, NewLT} = ydb_private_utils:do_logarithmic_advance(
         {L, LT}, Time, NewTime, Sigma, Eps/2)
-  , NewM = ydb_private_utils:do_bounded_advance(
-        M, Time, NewTime, Sigma, Eps/2, Mech)
-  , {NewTime, NewL, NewLT, NewM, Init}
-;
-
-update_private_state(
-    _New={_Data, Timestamp, _Options={Eps, Mech}}
-  , _Partial={Time, L, LT, M, Init}
-  , sum
-) ->
-    NewTime = Timestamp - Init
-  , Sigma = 1
-  , {NewL, NewLT} = ydb_private_utils:do_logarithmic_advance(
-        {L, LT}, Time, NewTime, Sigma, Eps/2)
-  , NewM = ydb_private_utils:do_bounded_sum_advance(
-        M, Time, NewTime, Sigma, Eps/2, Mech)
+  , NewM =
+        case Aggr of
+            count -> ydb_private_utils:do_bounded_advance(
+                M, Time, NewTime, Sigma, Eps/2, Mech)
+          ; sum -> ydb_private_utils:do_bounded_sum_advance(
+                M, Time, NewTime, Sigma, Eps/2, Mech)
+          %; avg -> ydb_private_utils:do_bounded_avg_advance(
+          %      M, Time, NewTime, Sigma, Eps/2, Mech)
+        end
   , {NewTime, NewL, NewLT, NewM, Init}
 .
