@@ -61,7 +61,7 @@ test_setup_helper(Predicate, N) ->
 
     % Set up a dummy node to pass the schema over.
   , {ok, DummyPid} = ydb_file_input:start_link([
-        {filename, "../data/select_test_helper.dta"}
+        {filename, "../test/data/select_test_helper.dta"}
       , {batch_size, 100}
       , {poke_freq, 1}
     ], [{schema, Schema}])

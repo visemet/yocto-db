@@ -5,10 +5,7 @@
 %%      node.
 -module(ydb_aggr_funs).
 
--export([identity/1]).
--export([get_aggr/1]).
--export([max_single/2]).
--export([make_private/4]).
+-export([get_aggr/1, identity/1, make_private/4]).
 
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").

@@ -90,7 +90,7 @@ test_setup(Columns, Include, Listener) ->
 
     % Read from the file
   , {ok, DummyPid} = ydb_file_input:start_link([
-        {filename, "../data/project_test_helper.dta"}
+        {filename, "../test/data/project_test_helper.dta"}
       , {batch_size, 1}
       , {poke_freq, 1}
     ], [{schema, Schema}])
