@@ -55,7 +55,7 @@ do_logarithmic_advance(
 %% ----------------------------------------------------------------- %%
 
 -spec do_bounded_sum_advance(
-    CurrMState :: {number()} | {number(), dict()}
+    CurrMState :: {number(), dict()}
   , CurrTime :: integer()
   , NewTime :: integer()
   , Sigma :: number()

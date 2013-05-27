@@ -567,6 +567,7 @@ sum_priv_all(List) ->
       , number()
       , {number()} | {number(), dict()}
       , integer()
+      , integer()
     }]
 ) ->
     {
@@ -575,6 +576,7 @@ sum_priv_all(List) ->
       , NewLT :: number()
       , NewM :: {number()} | {number(), dict()}
       , Init :: integer()
+      , NewC :: integer()
     }.
 
 %% @doc Computes the average over a single diff. This is the
@@ -582,29 +584,30 @@ sum_priv_all(List) ->
 %%      {Data, Timestamp, Options={Epsilon, Mechanism, MinInterval}}
 avg_priv_single(List, []) ->
     {_Data, Timestamp, {_Eps, _Mech, MinInterval}} = lists:last(List)
-  , lists:foldl(
-        fun(Tuple, Partial) -> update_private_state(Tuple, Partial, avg) end
+  , NewSumPartial = lists:foldl(
+        fun(Tuple, Partial) -> update_private_state(Tuple, Partial, sum) end
       , {0, 0, 0, undefined, Timestamp - MinInterval}
       , List
     )
+  , erlang:append_element(NewSumPartial, erlang:length(List))
 ;
 
 avg_priv_single(List, PrevList) ->
-    Prev = lists:last(PrevList)
-  , lists:foldl(
-        fun(Tuple, Partial) -> update_private_state(Tuple, Partial, avg) end
-      , Prev
+    {T, L, LT, M, I, C} = lists:last(PrevList)
+  , NewSumPartial = lists:foldl(
+        fun(Tuple, Partial) -> update_private_state(Tuple, Partial, sum) end
+      , {T, L, T, LT, M, I} % don't care about the count being private
       , List
     )
+  , erlang:append_element(NewSumPartial, C + erlang:length(List))
 .
 
 -spec avg_priv_all(List :: [term()]) -> term().
 
 %% @doc Computes the average over all the diffs. This is the AggrFun.
 avg_priv_all(List) ->
-% TODO: make this actually do the average
-    {_Time, _L, LT, M, _Init} = lists:last(List)
-  , round(LT + element(1, M))
+    {_Time, _L, LT, M, _Init, C} = lists:last(List)
+  , round(LT + element(1, M))/C
 .
 
 %% ----------------------------------------------------------------- %%
