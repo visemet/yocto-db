@@ -596,7 +596,7 @@ avg_priv_single(List, PrevList) ->
     {T, L, LT, M, I, C} = lists:last(PrevList)
   , NewSumPartial = lists:foldl(
         fun(Tuple, Partial) -> update_private_state(Tuple, Partial, sum) end
-      , {T, L, T, LT, M, I} % don't care about the count being private
+      , {T, L, LT, M, I} % don't care about the count being private
       , List
     )
   , erlang:append_element(NewSumPartial, C + erlang:length(List))
