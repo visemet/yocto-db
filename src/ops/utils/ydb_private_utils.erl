@@ -45,10 +45,14 @@ do_logarithmic_advance(
             NumSteps = num_steps(CurrTime, NewTime)
           , NewLT = add_inveps_noise(CurrL, Eps, NumSteps) + Sigma
           , {NewLT, NewLT}
+          % DEBUG: swap the previous line with the follwing:
+          %, {CurrL + Sigma, CurrL + Sigma}
       ; 3 ->
             NumSteps = num_steps(CurrTime, NewTime)
           , NewLT = add_inveps_noise(CurrL, Eps, NumSteps)
           , {NewLT + Sigma, NewLT}
+          % DEBUG: swap the previous line with the following
+          %, {CurrL + Sigma, CurrL}
     end
 .
 
@@ -181,6 +185,9 @@ do_binary_sum_advance(_State = {_CurrM, Freqs}, NewTime, Sigma, Eps) ->
   , EpsPrime = Eps/(math:log(T)/math:log(2) + 1)
   , NewFreqs = store_bit_frequency(Tau, Sigma, Freqs, EpsPrime)
   , NewM = get_bit_frequency(Tau, NewFreqs)
+  % DEBUG switch this line with the previous line to get the non-noisy
+  % counts to make sure data is being calculated correctly.
+  %, NewM = get_true_bit_frequency(Tau, NewFreqs)
   , {NewM, NewFreqs}
 .
 

@@ -633,20 +633,27 @@ avg_priv_all(List) ->
 update_private_state(
     _New={_Data, Timestamp, _Options={Eps, Mech, MinInterval}}
   , _Partial={Time, L, LT, M, Init}
-  , Aggr
+  , count
 ) ->
     NewTime = trunc((Timestamp - Init) / MinInterval)
   , Sigma = 1
   , {NewL, NewLT} = ydb_private_utils:do_logarithmic_advance(
         {L, LT}, Time, NewTime, Sigma, Eps/2)
-  , NewM =
-        case Aggr of
-            count -> ydb_private_utils:do_bounded_advance(
-                M, Time, NewTime, Sigma, Eps/2, Mech)
-          ; sum -> ydb_private_utils:do_bounded_sum_advance(
-                M, Time, NewTime, Sigma, Eps/2, Mech)
-          %; avg -> ydb_private_utils:do_bounded_avg_advance(
-          %      M, Time, NewTime, Sigma, Eps/2, Mech)
-        end
+  , NewM = ydb_private_utils:do_bounded_advance(
+        M, Time, NewTime, Sigma, Eps/2, Mech)
+  , {NewTime, NewL, NewLT, NewM, Init}
+;
+
+update_private_state(
+    _New={Data, Timestamp, _Options={Eps, Mech, MinInterval}}
+  , _Partial={Time, L, LT, M, Init}
+  , sum
+) ->
+    NewTime = trunc((Timestamp - Init) / MinInterval)
+  , Sigma = Data
+  , {NewL, NewLT} = ydb_private_utils:do_logarithmic_advance(
+        {L, LT}, Time, NewTime, Sigma, Eps/2)
+  , NewM = ydb_private_utils:do_bounded_sum_advance(
+        M, Time, NewTime, Sigma, Eps/2, Mech)
   , {NewTime, NewL, NewLT, NewM, Init}
 .
