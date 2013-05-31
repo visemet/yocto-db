@@ -253,7 +253,7 @@ extract_diffs(DiffTids) ->
   , DelSpec = [{{'-','_','$1'},[],['$1']}]
   , Deletes = lists:flatten(
         lists:map(fun(X) -> ets:select(X, DelSpec) end, DiffTids))
-  , {Inserts, Deletes}
+  , {lists:sort(Inserts), lists:sort(Deletes)}
 .
 
 %% ----------------------------------------------------------------- %%
