@@ -6,7 +6,7 @@
 -module(ydb_private_utils).
 
 -export([do_bounded_advance/6, do_logarithmic_advance/5
-       , do_bounded_sum_advance/6]).
+       , do_bounded_sum_advance/6, do_bounded_binary_advance/6]).
 -export([random_laplace/1]).
 
 %%% =============================================================== %%%
@@ -164,9 +164,78 @@ random_laplace(B) ->
   , RandNum
 .
 
+-spec do_bounded_binary_advance(
+    CurrMState :: {number(), dict()}
+  , NewTime :: integer()
+  , Sigma :: number()
+  , Eps :: number()
+  , W :: integer()
+  , Mech :: atom()
+) -> {NewM :: number(), NewFreqs :: dict()}.
+
+do_bounded_binary_advance(State, Tau, Sigma, Eps, W, 'count') ->
+    do_binary_count_advance_bounded(State, Tau, Sigma, Eps, W)
+;
+
+do_bounded_binary_advance(State, Tau, Sigma, Eps, W, 'sum') ->
+    do_binary_sum_advance_bounded(State, Tau, Sigma, Eps, W)
+.
+
 %%% =============================================================== %%%
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
+
+-spec do_binary_count_advance_bounded(
+    CurrMState :: {number(), dict()}
+  , NewTime :: integer()
+  , Sigma :: number()
+  , Eps :: number()
+  , W :: integer()
+) -> {NewM :: number(), NewFreqs :: dict()}.
+
+%% @doc Adds a count of Sigma at time NewTime to the binary
+%%      frequency table, and returns the new noisy count at NewTime as
+%%      well as the new table. This is not pan-private, since the real
+%%      values are stored in the frequency table.
+do_binary_count_advance_bounded(_State = {_CurrM, Freqs}, Tau, _Sigma, Eps, W) ->
+    EpsPrime = Eps/(math:log(W)/math:log(2) + 1)
+  , NewFreqs = store_bit_frequency(Tau, 1, Freqs, EpsPrime)
+  , NewM = get_bit_frequency(Tau, NewFreqs)
+  %, NewM = get_true_bit_frequency(Tau, NewFreqs) % true counts
+  , {NewM, NewFreqs}
+;
+
+do_binary_count_advance_bounded(undefined, NewTime, Sigma, Eps, W) ->
+    do_binary_count_advance_bounded({0, dict:new()}, NewTime, Sigma, Eps, W)
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec do_binary_sum_advance_bounded(
+    CurrMState :: {number(), dict()}
+  , NewTime :: integer()
+  , Sigma :: number()
+  , Eps :: number()
+  , W :: integer()
+) -> {NewM :: number(), NewFreqs :: dict()}.
+
+%% @doc Adds a count of Sigma at time NewTime to the binary
+%%      frequency table, and returns the new noisy count at NewTime as
+%%      well as the new table. This is not pan-private, since the real
+%%      values are stored in the frequency table.
+do_binary_sum_advance_bounded(_State = {_CurrM, Freqs}, Tau, Sigma, Eps, W) ->
+    EpsPrime = Eps/(math:log(W)/math:log(2) + 1)
+  , NewFreqs = store_bit_frequency(Tau, Sigma, Freqs, EpsPrime)
+  , NewM = get_bit_frequency(Tau, NewFreqs)
+  %, NewM = get_true_bit_frequency(Tau, NewFreqs) % true counts
+  , {NewM, NewFreqs}
+;
+
+do_binary_sum_advance_bounded(undefined, NewTime, Sigma, Eps, W) ->
+    do_binary_sum_advance_bounded({0, dict:new()}, NewTime, Sigma, Eps, W)
+.
+
+%% ----------------------------------------------------------------- %%
 
 -spec do_binary_sum_advance(
     CurrMState :: {number(), dict()}

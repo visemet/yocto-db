@@ -251,7 +251,6 @@ avg_all_nonincremental(List) ->
       , {0, 0}
       , List
     )
- % , io:format("Totalsum: ~w, ToalCount:~w~n~n", [TotalSum, TotalCount])
   , TotalSum / TotalCount
 .
 
@@ -497,6 +496,45 @@ count_priv_single(List, PrevList) ->
     )
 .
 
+-spec count_priv_single(
+    List :: [{term(), integer(), {number(), atom(), integer()}}]
+) ->
+    List :: [term()].
+
+%% @doc Produes the partial result for a single diff. This is the
+%%      PartialFun. Expects List to be a list of tuples of the form
+%%      {Data, Timestamp, Options={Epsilon, Mechanism, MinInterval}}
+%%      Nonincremental.
+count_priv_single(List) ->
+    List
+.
+
+-spec count_priv_all_nonincremental(List :: [term()]) -> term().
+
+%% @doc Computes the sum over all the diffs. This is the AggrFun.
+count_priv_all_nonincremental(List) ->
+    FlatList = lists:append(List)
+  , {_Data, Timestamp, {_Eps, _Mech, MinInterval}} = erlang:hd(FlatList)
+
+    % Find the size of the widnow
+  , MaxT = lists:foldl(
+        fun({_D, T, _O}, Mx) -> max(T, Mx) end, Timestamp, FlatList)
+  , MinT = lists:foldl(
+        fun({_D, T, _O}, Mn) -> min(T, Mn) end, Timestamp, FlatList)
+  , W = MaxT - MinT + 1 % window size over these diffs
+
+  , ResultPartial = lists:foldl(
+        fun(Tuple, Partial) ->
+            update_private_state_bounded(Tuple, Partial, W, 'count') end
+      , {0, undefined, Timestamp - MinInterval}
+      , FlatList
+    )
+
+  , {_Time, M, _Init} = ResultPartial
+  , round(element(1, M))
+.
+
+
 -spec count_priv_all(List :: [term()]) -> term().
 
 %% @doc Computes the count over all the diffs. This is the AggrFun.
@@ -546,7 +584,45 @@ sum_priv_single(List, PrevList) ->
     )
 .
 
--spec sum_priv_all(List :: [term()]) -> term().
+-spec sum_priv_single(
+    List :: [{term(), integer(), {number(), atom(), integer()}}]
+) ->
+    List :: [term()].
+
+%% @doc Produes the partial result for a single diff. This is the
+%%      PartialFun. Expects List to be a list of tuples of the form
+%%      {Data, Timestamp, Options={Epsilon, Mechanism, MinInterval}}
+%%      Nonincremental.
+sum_priv_single(List) ->
+    List
+.
+
+-spec sum_priv_all_nonincremental(List :: [term()]) -> term().
+
+%% @doc Computes the sum over all the diffs. This is the AggrFun.
+sum_priv_all_nonincremental(List) ->
+    FlatList = lists:append(List)
+  , {_Data, Timestamp, {_Eps, _Mech, MinInterval}} = erlang:hd(FlatList)
+
+    % Find the size of the widnow
+  , MaxT = lists:foldl(
+        fun({_D, T, _O}, Mx) -> max(T, Mx) end, Timestamp, FlatList)
+  , MinT = lists:foldl(
+        fun({_D, T, _O}, Mn) -> min(T, Mn) end, Timestamp, FlatList)
+  , W = MaxT - MinT + 1 % window size over these diffs
+
+  , ResultPartial = lists:foldl(
+        fun(Tuple, Partial) ->
+            update_private_state_bounded(Tuple, Partial, W, 'sum') end
+      , {0, undefined, Timestamp - MinInterval}
+      , FlatList
+    )
+
+  , {_Time, M, _Init} = ResultPartial
+  , round(element(1, M))
+.
+
+-spec sum_priv_all(List :: [term()]) -> term(). % incremental
 
 %% @doc Computes the sum over all the diffs. This is the AggrFun.
 sum_priv_all(List) ->
@@ -599,6 +675,44 @@ avg_priv_single(List, PrevList) ->
   , erlang:append_element(NewSumPartial, C + erlang:length(List))
 .
 
+-spec avg_priv_single(
+    List :: [{term(), integer(), {number(), atom(), integer()}}]
+) ->
+    List :: [term()].
+
+%% @doc Produes the partial result for a single diff. This is the
+%%      PartialFun. Expects List to be a list of tuples of the form
+%%      {Data, Timestamp, Options={Epsilon, Mechanism, MinInterval}}
+%%      Nonincremental.
+avg_priv_single(List) ->
+    List
+.
+
+-spec avg_priv_all_nonincremental(List :: [term()]) -> term().
+
+%% @doc Computes the sum over all the diffs. This is the AggrFun.
+avg_priv_all_nonincremental(List) ->
+    FlatList = lists:append(List)
+  , {_Data, Timestamp, {_Eps, _Mech, MinInterval}} = erlang:hd(FlatList)
+
+    % Find the size of the widnow
+  , MaxT = lists:foldl(
+        fun({_D, T, _O}, Mx) -> max(T, Mx) end, Timestamp, FlatList)
+  , MinT = lists:foldl(
+        fun({_D, T, _O}, Mn) -> min(T, Mn) end, Timestamp, FlatList)
+  , W = MaxT - MinT + 1 % window size over these diffs
+
+  , ResultPartial = lists:foldl(
+        fun(Tuple, Partial) ->
+            update_private_state_bounded(Tuple, Partial, W, 'sum') end
+      , {0, undefined, Timestamp - MinInterval}
+      , FlatList
+    )
+
+  , {_Time, M, _Init} = ResultPartial
+  , round(element(1, M)) / erlang:length(List)
+.
+
 -spec avg_priv_all(List :: [term()]) -> term().
 
 %% @doc Computes the average over all the diffs. This is the AggrFun.
@@ -606,6 +720,41 @@ avg_priv_all(List) ->
     {_Time, _L, LT, M, _Init, C} = lists:last(List)
   , round(LT + element(1, M))/C
 .
+
+
+%% ----------------------------------------------------------------- %%
+
+-spec update_private_state_bounded(
+    New :: {term(), integer(), {number(), atom(), integer()}}
+  , Partial :: {
+        integer()
+      , {number()} | {number(), dict()}
+      , integer()
+    }
+  , W :: integer()
+  , Aggr :: 'sum' | 'count'
+) ->
+    {
+        NewTime :: integer()
+      , NewM :: {number()} | {number(), dict()} | 'undefined'
+      , Init :: integer()
+    }.
+
+%% @doc Takes in the current partial results for a privacy-preserving
+%%      aggregates and updates the results for an incoming tuple.
+update_private_state_bounded(
+    _New={Data, Timestamp, _Options={Eps, _Mech, MinInterval}}
+  , _Partial={_Time, M, Init}
+  , W
+  , Aggr
+) ->
+    NewTime = trunc((Timestamp - Init) / MinInterval)
+  , Sigma = Data
+  , NewM = ydb_private_utils:do_bounded_binary_advance(
+        M, NewTime, Sigma, Eps/2, W, Aggr)
+  , {NewTime, NewM, Init}
+.
+
 
 %% ----------------------------------------------------------------- %%
 
