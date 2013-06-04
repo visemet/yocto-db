@@ -10,65 +10,59 @@
 %% @headerfile "ydb_plan_node.hrl"
 -include("ydb_plan_node.hrl").
 
-%% Aggregate function table for the partial result funs.
--define(PR_FUN_TABLE, dict:from_list([
-    {sum, fun sum_single/2}
-  , {count, fun count_single/2}
-  , {avg, fun avg_single/2}
-  , {min, fun min_single/2}
-  , {max, fun max_single/2}
-  , {stddev, fun stddev_single/2}
-  , {var, fun var_single/2}
+%% Dict that uses {Aggr, Incremental, Private} as the key and the
+%% corresponding funs in the tuple {PrFun, AggrFun} as the value.
+-define(FUN_TABLE, dict:from_list([
+    % non-incremental, non-private aggregates
+    {{sum, false, false},
+        {(fun (A) -> sum_single(A, []) end), (fun sum_all_noninc/1)}}
+  , {{count, false, false},
+        {(fun (A) -> count_single(A, []) end), (fun count_all_noninc/1)}}
+  , {{avg, false, false},
+        {(fun (A) -> avg_single(A, []) end), (fun avg_all_noninc/1)}}
+  , {{min, false, false},
+        {(fun (A) -> min_single(A, []) end), (fun min_all_noninc/1)}}
+  , {{max, false, false},
+        {(fun (A) -> max_single(A, []) end), (fun max_all_noninc/1)}}
+  , {{stddev, false, false},
+        {(fun (A) -> stddev_single(A, []) end), (fun stddev_all_noninc/1)}}
+  , {{var, false, false},
+        {(fun (A) -> var_single(A, []) end), (fun var_all_noninc/1)}}
+
+    % incremental, non-private aggregates
+  , {{sum, true, false},
+        {(fun sum_single/2), (fun sum_all_inc/1)}}
+  , {{count, true, false},
+        {(fun count_single/2), (fun count_all_inc/1)}}
+  , {{avg, true, false},
+        {(fun avg_single/2), (fun avg_all_inc/1)}}
+  , {{min, true, false},
+        {(fun min_single/2), (fun min_all_inc/1)}}
+  , {{max, true, false},
+        {(fun max_single/2), (fun max_all_inc/1)}}
+  , {{stddev, true, false},
+        {(fun stddev_single/2), (fun stddev_all_inc/1)}}
+  , {{var, true, false},
+        {(fun var_single/2), (fun var_all_inc/1)}}
+
+    % non-incremental, private aggregates (windowed aggregates)
+  , {{sum, false, true},
+        {(fun sum_priv_single/1), (fun sum_priv_all_noninc/1)}}
+  , {{count, false, true},
+        {(fun count_priv_single/1), (fun count_priv_all_noninc/1)}}
+  , {{avg, false, true},
+        {(fun avg_priv_single/1), (fun avg_priv_all_noninc/1)}}
+
+    % incremental, private aggregates (infinite history/non-windowed aggrs)
+  , {{sum, true, true},
+        {(fun sum_priv_single/2), (fun sum_priv_all/1)}}
+  , {{count, true, true},
+        {(fun count_priv_single/2), (fun count_priv_all/1)}}
+  , {{avg, true, true},
+        {(fun avg_priv_single/2), (fun avg_priv_all/1)}}
+
 ])).
 
-%% Partial result funs for private aggregates.
--define(PRIVATE_PR_FUN_TABLE, dict:from_list([
-    {sum, fun sum_priv_single/2}
-  , {count, fun count_priv_single/2}
-  , {avg, fun avg_priv_single/2}
-  , {min, {error, invalid_aggregate}}
-  , {max, {error, invalid_aggregate}}
-  , {stddev, {error, invalid_aggregate}}
-  , {var, {error, invalid_aggregate}}
-])).
-
-%% Incremental aggregate function table for the overall aggregate
-%% funs.
--define(AGGR_FUN_INCREMENTAL_TABLE, dict:from_list([
-    {sum, fun sum_all_incremental/1}
-  , {count, fun count_all_incremental/1}
-  , {avg, fun avg_all_incremental/1}
-  , {min, fun min_all_incremental/1}
-  , {max, fun max_all_incremental/1}
-  , {stddev, fun stddev_all_incremental/1}
-  , {var, fun var_all_incremental/1}
-])).
-
-%% Non-incremental aggregate function table for the overall aggregate
-%% funs.
--define(AGGR_FUN_NONINCREMENTAL_TABLE, dict:from_list([
-    {sum, fun sum_all_nonincremental/1}
-  , {count, fun count_all_nonincremental/1}
-  , {avg, fun avg_all_nonincremental/1}
-  , {min, fun min_all_nonincremental/1}
-  , {max, fun max_all_nonincremental/1}
-  , {stddev, fun stddev_all_nonincremental/1}
-  , {var, fun var_all_nonincremental/1}
-])).
-
-%% Overall aggregate funs for private aggregates.
--define(PRIVATE_AGGR_FUN_TABLE, dict:from_list([
-    {sum, fun sum_priv_all/1}
-  , {count, fun count_priv_all/1}
-  , {avg, fun avg_priv_all/1}
-  % {sum, fun sum_priv_all_nonincremental/1} % windowed only
-  %, {count, fun count_priv_all_nonincremental/1} % windowed only
-  %, {avg, fun avg_priv_all_nonincremental/1} % windowed only
-  , {min, {error, invalid_aggregate}}
-  , {max, {error, invalid_aggregate}}
-  , {stddev, {error, invalid_aggregate}}
-  , {var, {error, invalid_aggregate}}
-])).
 
 -record(aggr, {
     name :: atom()
@@ -140,24 +134,7 @@ find_aggr([], _State = #aggr{
   , incremental = Incremental
   , private = Private
 }) ->
-    % Private operators.
-    if
-        % Private operators.
-        Private == true -> {
-            dict:fetch(Name, ?PRIVATE_PR_FUN_TABLE)
-          , dict:fetch(Name, ?PRIVATE_AGGR_FUN_TABLE)
-        }
-        % Incremental operators.
-      ; Incremental == true -> {
-            dict:fetch(Name, ?PR_FUN_TABLE)
-          , dict:fetch(Name, ?AGGR_FUN_INCREMENTAL_TABLE)
-        }
-        % Non-incremental operators.
-      ; true ->  {
-            dict:fetch(Name, ?PR_FUN_TABLE)
-          , dict:fetch(Name, ?AGGR_FUN_NONINCREMENTAL_TABLE)
-        }
-    end
+    dict:fetch({Name, Incremental, Private}, ?FUN_TABLE)
 .
 
 %%% =============================================================== %%%
@@ -178,19 +155,19 @@ count_single(List, Prev) ->
   , PrevCount + erlang:length(List)
 .
 
--spec count_all_nonincremental(List :: [term()]) -> integer().
+-spec count_all_noninc(List :: [term()]) -> integer().
 
 %% @doc Computes the count over all the diffs. This is the AggrFun for
 %%      the non-incremental version.
-count_all_nonincremental(List) ->
+count_all_noninc(List) ->
     lists:sum(List)
 .
 
--spec count_all_incremental(List :: [term()]) -> integer().
+-spec count_all_inc(List :: [term()]) -> integer().
 
 %% @doc Computes the count over all the diffs. This is the AggrFun for
 %%      the incremental version.
-count_all_incremental(List) ->
+count_all_inc(List) ->
     lists:last(List)
 .
 
@@ -210,19 +187,19 @@ sum_single(List, Prev) ->
   , PrevSum + lists:sum(List)
 .
 
--spec sum_all_nonincremental(List :: [term()]) -> integer().
+-spec sum_all_noninc(List :: [term()]) -> integer().
 
 %% @doc Computes the sum over all the diffs. This is the AggrFun for
 %%      the non-incremental version.
-sum_all_nonincremental(List) ->
+sum_all_noninc(List) ->
     lists:sum(List)
 .
 
--spec sum_all_incremental(List :: [term()]) -> term().
+-spec sum_all_inc(List :: [term()]) -> term().
 
 %% @doc Computes the sum over all the diffs. This is the AggrFun for
 %%      the incremental version.
-sum_all_incremental(List) ->
+sum_all_inc(List) ->
     lists:last(List)
 .
 
@@ -242,11 +219,11 @@ avg_single(List, Prev) ->
   , {erlang:length(List) + PrevCount, lists:sum(List) + PrevSum}
 .
 
--spec avg_all_nonincremental(List :: [number()]) -> float().
+-spec avg_all_noninc(List :: [number()]) -> float().
 
 %% @doc Computes the average over all the diffs. This is the AggrFun
 %%      for the non-incremental version.
-avg_all_nonincremental(List) ->
+avg_all_noninc(List) ->
     {TotalCount, TotalSum} = lists:foldl(
         fun(X, {Count, Sum}) ->
             {Count + element(1, X), Sum + element(2, X)}
@@ -257,11 +234,11 @@ avg_all_nonincremental(List) ->
   , TotalSum / TotalCount
 .
 
--spec avg_all_incremental(List :: [number()]) -> float().
+-spec avg_all_inc(List :: [number()]) -> float().
 
 %% @doc Computes the average over all the diffs. This is the AggrFun
 %%      for the incremental version.
-avg_all_incremental(List) ->
+avg_all_inc(List) ->
     {Count, Sum} = lists:last(List)
   , Sum / Count
 .
@@ -281,19 +258,19 @@ min_single(List, Prev) ->
     min(lists:min(List), lists:min(Prev))
 .
 
--spec min_all_nonincremental(List :: [term()]) -> term().
+-spec min_all_noninc(List :: [term()]) -> term().
 
 %% @doc Computes the minimum over all the diffs. This is the AggrFun
 %%      for the non-incremental version.
-min_all_nonincremental(List) ->
+min_all_noninc(List) ->
     lists:min(List)
 .
 
--spec min_all_incremental(List :: [term()]) -> term().
+-spec min_all_inc(List :: [term()]) -> term().
 
 %% @doc Computes the minimum over all the diffs. This is the AggrFun
 %%      for the incremental version.
-min_all_incremental(List) ->
+min_all_inc(List) ->
     lists:last(List)
 .
 
@@ -312,19 +289,19 @@ max_single(List, Prev) ->
     max(lists:max(List), lists:max(Prev))
 .
 
--spec max_all_nonincremental(List :: [term()]) -> term().
+-spec max_all_noninc(List :: [term()]) -> term().
 
 %% @doc Computes the maximum over all the diffs. This is the AggrFun
 %%      for the non-incremental version.
-max_all_nonincremental(List) ->
+max_all_noninc(List) ->
     lists:max(List)
 .
 
--spec max_all_incremental(List :: [term()]) -> term().
+-spec max_all_inc(List :: [term()]) -> term().
 
 %% @doc Computes the maximum over all the diffs. This is the AggrFun
 %%      for the incremental version.
-max_all_incremental(List) ->
+max_all_inc(List) ->
     lists:last(List)
 .
 
@@ -352,11 +329,11 @@ var_single(List, Prev) ->
     }
 .
 
--spec var_all_nonincremental(List :: [term()]) -> term().
+-spec var_all_noninc(List :: [term()]) -> term().
 
 %% @doc Computes the population variance over all the diffs. This is
 %%      the AggrFun for the non-incremental version.
-var_all_nonincremental(List) ->
+var_all_noninc(List) ->
     {TotalCount, TotalSum, TotalSumSq} = lists:foldl(
         fun(X, {Count, Sum, SumSq}) ->
             {
@@ -371,11 +348,11 @@ var_all_nonincremental(List) ->
   , (TotalCount * TotalSumSq - TotalSum * TotalSum) / (TotalCount * TotalCount)
 .
 
--spec var_all_incremental(List :: [term()]) -> term().
+-spec var_all_inc(List :: [term()]) -> term().
 
 %% @doc Computes the population variance over all the diffs. This is
 %%      the AggrFun for the incremental version.
-var_all_incremental(List) ->
+var_all_inc(List) ->
     {Count, Sum, SumSq} = lists:last(List)
   , (Count * SumSq - Sum * Sum) / (Count * Count)
 .
@@ -404,11 +381,11 @@ stddev_single(List, Prev) ->
     }
 .
 
--spec stddev_all_nonincremental(List :: [term()]) -> term().
+-spec stddev_all_noninc(List :: [term()]) -> term().
 
 %% @doc Computes the population standard deviation over all the diffs.
 %%      This is the AggrFun for the non-incremental version.
-stddev_all_nonincremental(List) ->
+stddev_all_noninc(List) ->
     {TotalCount, TotalSum, TotalSumSq} = lists:foldl(
         fun(X, {Count, Sum, SumSq}) ->
             {
@@ -426,11 +403,11 @@ stddev_all_nonincremental(List) ->
     )
 .
 
--spec stddev_all_incremental(List :: [term()]) -> term().
+-spec stddev_all_inc(List :: [term()]) -> term().
 
 %% @doc Computes the population standard deviation over all the diffs.
 %%      This is the AggrFun for the incremental version.
-stddev_all_incremental(List) ->
+stddev_all_inc(List) ->
     {Count, Sum, SumSq} = lists:last(List)
   , math:sqrt((Count * SumSq - Sum * Sum) / (Count * Count))
 .
@@ -514,10 +491,10 @@ count_priv_single(List) ->
     List
 .
 
--spec count_priv_all_nonincremental(List :: [term()]) -> term().
+-spec count_priv_all_noninc(List :: [term()]) -> term().
 
 %% @doc Computes the sum over all the diffs. This is the AggrFun.
-count_priv_all_nonincremental(List) ->
+count_priv_all_noninc(List) ->
     FlatList = lists:append(List)
   , {_Data, Timestamp, {_Eps, _Mech, MinInterval}} = erlang:hd(FlatList)
 
@@ -604,10 +581,10 @@ sum_priv_single(List) ->
     List
 .
 
--spec sum_priv_all_nonincremental(List :: [term()]) -> term().
+-spec sum_priv_all_noninc(List :: [term()]) -> term().
 
 %% @doc Computes the sum over all the diffs. This is the AggrFun.
-sum_priv_all_nonincremental(List) ->
+sum_priv_all_noninc(List) ->
     FlatList = lists:append(List)
   , {_Data, Timestamp, {_Eps, _Mech, MinInterval}} = erlang:hd(FlatList)
 
@@ -697,10 +674,10 @@ avg_priv_single(List) ->
     List
 .
 
--spec avg_priv_all_nonincremental(List :: [term()]) -> term().
+-spec avg_priv_all_noninc(List :: [term()]) -> term().
 
 %% @doc Computes the sum over all the diffs. This is the AggrFun.
-avg_priv_all_nonincremental(List) ->
+avg_priv_all_noninc(List) ->
     FlatList = lists:append(List)
   , {_Data, Timestamp, {_Eps, _Mech, MinInterval}} = erlang:hd(FlatList)
 

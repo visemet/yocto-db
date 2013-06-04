@@ -602,7 +602,7 @@ do_update(
 
       ; Incremental =:= false ->
             PartialFun(
-                evaluate_tuples(Tuples, EvalFun, {Columns, Schema}), []
+                evaluate_tuples(Tuples, EvalFun, {Columns, Schema})
             )
     end
 

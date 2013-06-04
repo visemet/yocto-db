@@ -40,7 +40,7 @@ test_setup(Aggregate, Answers, Groups) ->
 
     % Get the aggregate functions.
   , {PrFun, AggrFun} = ydb_aggr_funs:get_aggr([
-        {incremental, true}
+        {incremental, false}
       , {name, Aggregate}
       , {private, false}
     ])
