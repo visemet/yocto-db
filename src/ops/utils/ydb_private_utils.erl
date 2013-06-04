@@ -44,15 +44,13 @@ do_logarithmic_advance(
       ; 2 ->
             NumSteps = num_steps(CurrTime, NewTime)
           , NewLT = add_inveps_noise(CurrL, Eps, NumSteps) + Sigma
-          , {NewLT, NewLT}
-          % DEBUG: swap the previous line with the follwing:
-          %, {CurrL + Sigma, CurrL + Sigma}
+          , {NewLT, NewLT} % noisy
+          %, {CurrL + Sigma, CurrL + Sigma} % DEBUG (non-noisy)
       ; 3 ->
             NumSteps = num_steps(CurrTime, NewTime)
           , NewLT = add_inveps_noise(CurrL, Eps, NumSteps)
-          , {NewLT + Sigma, NewLT}
-          % DEBUG: swap the previous line with the following
-          %, {CurrL + Sigma, CurrL}
+          , {NewLT + Sigma, NewLT} % noisy
+          %, {CurrL + Sigma, CurrL} % DEBUG (non-noisy)
     end
 .
 
@@ -200,8 +198,8 @@ do_bounded_binary_advance(State, Tau, Sigma, Eps, W, 'sum') ->
 do_binary_count_advance_bounded(_State = {_CurrM, Freqs}, Tau, _Sigma, Eps, W) ->
     EpsPrime = Eps/(math:log(W)/math:log(2) + 1)
   , NewFreqs = store_bit_frequency(Tau, 1, Freqs, EpsPrime)
-  , NewM = get_bit_frequency(Tau, NewFreqs)
-  %, NewM = get_true_bit_frequency(Tau, NewFreqs) % true counts
+  , NewM = get_bit_frequency(Tau, NewFreqs) % noisy counts
+  %, NewM = get_true_bit_frequency(Tau, NewFreqs) % DEBUG true counts
   , {NewM, NewFreqs}
 ;
 
@@ -226,9 +224,9 @@ do_binary_count_advance_bounded(undefined, NewTime, Sigma, Eps, W) ->
 do_binary_sum_advance_bounded(_State = {_CurrM, Freqs}, Tau, Sigma, Eps, W) ->
     EpsPrime = Eps/(math:log(W)/math:log(2) + 1)
   , NewFreqs = store_bit_frequency(Tau, Sigma, Freqs, EpsPrime)
-  , NewM = get_bit_frequency(Tau, NewFreqs)
-  %, NewM = get_true_bit_frequency(Tau, NewFreqs) % true counts
-  , {NewM, NewFreqs}
+  , NewM = get_bit_frequency(Tau, NewFreqs) % noisy counts
+  %, NewM = get_true_bit_frequency(Tau, NewFreqs) % DEBUG true counts
+  , {NewM * 1.0, NewFreqs}
 ;
 
 do_binary_sum_advance_bounded(undefined, NewTime, Sigma, Eps, W) ->
@@ -253,10 +251,8 @@ do_binary_sum_advance(_State = {_CurrM, Freqs}, NewTime, Sigma, Eps) ->
   , Tau = NewTime - T
   , EpsPrime = Eps/(math:log(T)/math:log(2) + 1)
   , NewFreqs = store_bit_frequency(Tau, Sigma, Freqs, EpsPrime)
-  , NewM = get_bit_frequency(Tau, NewFreqs)
-  % DEBUG switch this line with the previous line to get the non-noisy
-  % counts to make sure data is being calculated correctly.
-  %, NewM = get_true_bit_frequency(Tau, NewFreqs)
+  , NewM = get_bit_frequency(Tau, NewFreqs) % noisy
+  %, NewM = get_true_bit_frequency(Tau, NewFreqs) % DEBUG (non-noisy)
   , {NewM, NewFreqs}
 .
 

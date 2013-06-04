@@ -61,6 +61,9 @@
     {sum, fun sum_priv_all/1}
   , {count, fun count_priv_all/1}
   , {avg, fun avg_priv_all/1}
+  % {sum, fun sum_priv_all_nonincremental/1} % windowed only
+  %, {count, fun count_priv_all_nonincremental/1} % windowed only
+  %, {avg, fun avg_priv_all_nonincremental/1} % windowed only
   , {min, {error, invalid_aggregate}}
   , {max, {error, invalid_aggregate}}
   , {stddev, {error, invalid_aggregate}}
@@ -478,6 +481,8 @@ make_private(EvalFun, Epsilon, Mechanism, MinInterval) ->
 %% @doc Computes the count over a single diff. This is the
 %%      PartialFun. Expects List to be a list of tuples of the form
 %%      {Data, Timestamp, Options={Epsilon, Mechanism, MinInterval}}
+% count_priv_single(List, []) -> List; % windowed only
+
 count_priv_single(List, []) ->
     {_Data, Timestamp, {_Eps, _Mech, MinInterval}} = lists:nth(1, List)
   , lists:foldl(
@@ -566,6 +571,8 @@ count_priv_all(List) ->
 %% @doc Computes the sum over a single diff. This is the
 %%      PartialFun. Expects List to be a list of tuples of the form
 %%      {Data, Timestamp, Options={Epsilon, Mechanism, MinInterval}}
+% sum_priv_single(List, []) -> List; % windowed only
+
 sum_priv_single(List, []) ->
     {_Data, Timestamp, {_Eps, _Mech, MinInterval}} = lists:last(List)
   , lists:foldl(
@@ -655,6 +662,8 @@ sum_priv_all(List) ->
 %% @doc Computes the average over a single diff. This is the
 %%      PartialFun. Expects List to be a list of tuples of the form
 %%      {Data, Timestamp, Options={Epsilon, Mechanism, MinInterval}}
+%avg_priv_single(List, []) -> List; % windowed only
+
 avg_priv_single(List, []) ->
     {_Data, Timestamp, {_Eps, _Mech, MinInterval}} = lists:last(List)
   , NewSumPartial = lists:foldl(
@@ -710,7 +719,7 @@ avg_priv_all_nonincremental(List) ->
     )
 
   , {_Time, M, _Init} = ResultPartial
-  , round(element(1, M)) / erlang:length(List)
+  , element(1, M) / erlang:length(FlatList)
 .
 
 -spec avg_priv_all(List :: [term()]) -> term().
