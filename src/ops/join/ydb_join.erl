@@ -294,7 +294,18 @@ received_left(LeftDiff, State = #join{
       , LeftHistorySize
       , NumRightDiffs
     ) of
-        true -> erlang:tl(lists:append(LeftDiffs, [LeftDiff]))
+        true ->
+            if
+                erlang:length(LeftDiffs) =:= 0 -> pass
+
+              ; erlang:length(LeftDiffs) > 0 ->
+                    ydb_plan_node:free_diffs(
+                        ets:info(erlang:hd(LeftDiffs), owner)
+                      , [erlang:hd(LeftDiffs)]
+                    )
+            end
+
+          , erlang:tl(lists:append(LeftDiffs, [LeftDiff]))
 
       ; false -> lists:append(LeftDiffs, [LeftDiff])
     end
@@ -308,7 +319,18 @@ received_left(LeftDiff, State = #join{
               , RightHistorySize
               , NumLeftDiffs + 1
             ) of
-                true -> erlang:tl(RightDiffs)
+                true ->
+                    if
+                        erlang:length(RightDiffs) =:= 0 -> pass
+
+                      ; erlang:length(RightDiffs) > 0 ->
+                            ydb_plan_node:free_diffs(
+                                ets:info(erlang:hd(RightDiffs), owner)
+                              , [erlang:hd(RightDiffs)]
+                            )
+                    end
+
+                  , erlang:tl(RightDiffs)
 
               ; false -> RightDiffs
             end
@@ -385,7 +407,18 @@ received_right(RightDiff, State = #join{
       , RightHistorySize
       , NumLeftDiffs
     ) of
-        true -> erlang:tl(lists:append(RightDiffs, [RightDiff]))
+        true ->
+            if
+                erlang:length(RightDiffs) =:= 0 -> pass
+
+              ; erlang:length(RightDiffs) > 0 ->
+                    ydb_plan_node:free_diffs(
+                        ets:info(erlang:hd(RightDiffs), owner)
+                      , [erlang:hd(RightDiffs)]
+                    )
+            end
+
+          , erlang:tl(lists:append(RightDiffs, [RightDiff]))
 
       ; false -> lists:append(RightDiffs, [RightDiff])
     end
@@ -399,7 +432,18 @@ received_right(RightDiff, State = #join{
               , LeftHistorySize
               , NumRightDiffs + 1
             ) of
-                true -> erlang:tl(LeftDiffs)
+                true ->
+                    if
+                        erlang:length(LeftDiffs) =:= 0 -> pass
+
+                      ; erlang:length(LeftDiffs) > 0 ->
+                            ydb_plan_node:free_diffs(
+                                ets:info(erlang:hd(LeftDiffs), owner)
+                              , [erlang:hd(LeftDiffs)]
+                            )
+                    end
+
+                  , erlang:tl(LeftDiffs)
 
               ; false -> LeftDiffs
             end

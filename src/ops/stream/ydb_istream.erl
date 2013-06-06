@@ -75,6 +75,8 @@ delegate({diffs, Diffs}, State = #istream{}) when is_list(Diffs) ->
       , Diffs
     )
 
+  , ydb_plan_node:free_diffs(ets:info(erlang:hd(Diffs), owner), Diffs)
+
   , {ok, State}
 ;
 

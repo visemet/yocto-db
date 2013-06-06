@@ -191,6 +191,7 @@ delegate({diffs, Diffs}, State = #aggr{grouped=Grouped})
       , Diffs
     )
   , ydb_plan_node:send_diffs(erlang:self(), AggrDiffs)
+  , ydb_plan_node:free_diffs(ets:info(erlang:hd(Diffs), owner), Diffs)
   , {ok, NewState}
 ;
 
