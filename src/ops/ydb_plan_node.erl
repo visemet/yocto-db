@@ -11,7 +11,7 @@
   , remove_listener/2, relegate/2, relegate/3
 ]).
 
--export([send_tuples/2, send_diffs/2]).
+-export([send_tuples/2, send_diffs/2, free_diffs/2]).
 
 -export([
     init/1, handle_call/3, handle_cast/2, handle_info/2
@@ -184,6 +184,15 @@ send_tuples(PlanNode, Tuples) ->
 %%      `{diffs, Diffs}' message.
 send_diffs(PlanNode, Diffs) ->
     notify(PlanNode, {'$gen_cast', {relegate, {diffs, Diffs}}})
+.
+
+%% ----------------------------------------------------------------- %%
+
+-spec free_diffs(PlanNode :: pid(), Diffs :: [ets:tid()]) -> ok.
+
+%% @doc Deletes the diffs owned by the plan node.
+free_diffs(PlanNode, Diffs) ->
+    gen_server:cast(PlanNode, {free_diffs, Diffs})
 .
 
 %% ----------------------------------------------------------------- %%
@@ -402,6 +411,24 @@ handle_cast(
             {stop, Reason, State}
     end
 ;
+
+handle_cast(
+    {free_diffs, Diffs}
+  , State = #plan_node{}
+) when
+    is_list(Diffs)
+  ->
+    lists:foreach(
+        fun (Diff) ->
+            ets:delete(Diff)
+        end
+
+      , Diffs
+    )
+
+  , {noreply, State}
+;
+
 handle_cast(_Request, State) ->
     {noreply, State}
 .
