@@ -658,13 +658,26 @@ cross_product(LeftDiff, RightDiff, OutputDiff) ->
 
     % PLUS x PLUS -> PLUS
   , lists:foreach(
-        fun (LeftTuple = #ydb_tuple{}) ->
-            OutputTuples = lists:map(
-                fun (RightTuple = #ydb_tuple{}) ->
-                    merge_tuples(LeftTuple, RightTuple)
+        fun (LeftTuple = #ydb_tuple{timestamp = LeftTimestamp}) ->
+            OutputTuples = lists:filter(
+                fun (#ydb_tuple{}) -> true
+
+                  ; (_Elem) -> false
                 end
 
-              , RightPlus
+              , lists:map(
+                    fun (RightTuple = #ydb_tuple{timestamp = RightTimestamp}) ->
+                        if
+                            LeftTimestamp =:= RightTimestamp ->
+                                merge_tuples(LeftTuple, RightTuple)
+
+                          ; LeftTimestamp =/= RightTimestamp ->
+                                {}
+                        end
+                    end
+
+                  , RightPlus
+                )
             )
 
           , ydb_ets_utils:add_diffs(OutputDiff, '+', join, OutputTuples)
@@ -700,11 +713,11 @@ cross_product(LeftDiff, RightDiff, OutputDiff) ->
 
 %% @doc Appends two tuples together.
 merge_tuples(
-    #ydb_tuple{data = LeftData}
+    #ydb_tuple{timestamp = Timestamp, data = LeftData}
   , #ydb_tuple{data = RightData}
 ) ->
-    Timestamp = ydb_time_utils:get_curr_time()
-  , Data = erlang:list_to_tuple(
+    % Timestamp = ydb_time_utils:get_curr_time()
+    Data = erlang:list_to_tuple(
         lists:append(
             erlang:tuple_to_list(LeftData)
           , erlang:tuple_to_list(RightData)
