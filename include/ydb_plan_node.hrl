@@ -4,6 +4,8 @@
 -export_type([compare/0, ydb_clause/0, ydb_tuple/0]).
 -export_type([ydb_schema/0, ydb_timestamp/0]).
 
+-export_type([ydb_plan_op/0, ydb_node_id/0]).
+
 -record(ydb_tuple, {
     timestamp=0 :: non_neg_integer()
   , data={} :: tuple()
@@ -101,5 +103,11 @@
 
 -type ydb_clause() :: #ydb_cv{} | ydb_cc() | #ydb_and{} | #ydb_or{} | #ydb_not{}.
 %% A clause involving operations on columns.
+
+%% ----------------------------------------------------------------- %%
+
+-type ydb_plan_op() :: atom().
+
+-type ydb_node_id() :: {Type :: ydb_plan_op(), Id :: pos_integer()}.
 
 %% ----------------------------------------------------------------- %%
