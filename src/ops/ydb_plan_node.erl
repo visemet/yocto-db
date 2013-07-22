@@ -30,14 +30,24 @@
   , wrapped :: term()
 
   , listeners=sets:new() :: set()
+  , manager :: 'undefined' | pid()
+  , publishers :: 'undefined'
+                | [{Index :: pos_integer(), NodeId :: ydb_node_id()}]
 }).
 
 -type plan_node() :: #plan_node{
     type :: atom()
+
   , schema :: ydb_schema()
   , timestamp :: ydb_timestamp()
+
   , wrapped :: term()
-  , listeners :: set()}.
+
+  , listeners :: set()
+  , manager :: 'undefined' | pid()
+  , publishers :: 'undefined'
+                | [{Index :: pos_integer(), NodeId :: ydb_node_id()}]
+}.
 %% Internal plan node state.
 
 %%% =============================================================== %%%
@@ -349,6 +359,22 @@ handle_cast(
 ;
 
 handle_cast(
+    {call_ready, MgrFun, NodeId}
+  , State0
+) ->
+    MgrPid = MgrFun()
+
+  , {ok, Publishers} = gen_server:call(MgrPid, {ready, NodeId})
+
+  , State1 = State0#plan_node{
+        manager=MgrPid
+      , publishers=Publishers
+    }
+
+  , {noreply, State1}
+;
+
+handle_cast(
     {prepare_schema, PlanNodes}
   , State = #plan_node{
         type = Type
@@ -514,6 +540,15 @@ init([Timestamp = {Unit, Name} | Options], State = #plan_node{})
   , is_list(Options)
   ->
     init(Options, State#plan_node{timestamp=Timestamp})
+;
+
+init([{ready_args, MgrFun, NodeId} | Options], State)
+  when
+    is_function(MgrFun, 0)
+  ->
+    gen_server:cast(erlang:self(), {call_ready, MgrFun, NodeId})
+
+  , init(Options, State)
 ;
 
 init([{listen, PlanNodes} | Options], State = #plan_node{})
