@@ -50,15 +50,16 @@ handle_call(
 ) ->
     Pids1 = add_pid(NodeId, Pid, Pids0)
 
-  , {_Length, Result} = lists:foldl(
+  , {_Length, Result0} = lists:foldl(
         fun (Elem, {Index0, Result0}) ->
             Index1 = Index0 + 1
           , Result1 = case Elem of
                 {NodeId, From} ->
                     case dict:find(From, Pids1) of
-                        {ok, Value} ->
-                            % Add `NodeId' as listener of `From'
-                            ydb_plan_node:add_listener(Value, Pid)
+                        {ok, Value} -> gen_server:cast(
+                            Pid
+                          , {publisher_pid, Value, From}
+                        )
 
                       ; error -> pass
                     end
@@ -67,9 +68,10 @@ handle_call(
 
               ; {To, NodeId} ->
                     case dict:find(To, Pids1) of
-                        {ok, Value} ->
-                            % Add `To' as listener of `NodeId'
-                            ydb_plan_node:add_listener(Pid, Value)
+                        {ok, Value} -> gen_server:cast(
+                            Value
+                          , {publisher_pid, Pid, NodeId}
+                        )
 
                       ; error -> pass
                     end
@@ -90,7 +92,8 @@ handle_call(
         pids = Pids1
     }
 
-  , {reply, {ok, Result}, State1}
+  , Result1 = lists:reverse(Result0)
+  , {reply, {ok, Result1}, State1}
 ;
 
 handle_call(_Request, _From, State) ->

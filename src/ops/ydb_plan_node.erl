@@ -32,7 +32,10 @@
   , listeners=sets:new() :: set()
   , manager :: 'undefined' | pid()
   , publishers :: 'undefined'
-                | [{Index :: pos_integer(), NodeId :: ydb_node_id()}]
+                | [{
+                        Index :: pos_integer()
+                     , NodeId :: ydb_node_id() | pid()
+                  }]
 }).
 
 -type plan_node() :: #plan_node{
@@ -115,7 +118,7 @@ notify(PlanNode, Message) when is_pid(PlanNode) ->
 
 -spec add_listener(pid() | atom(), pid()) ->
     {ok, ydb_schema()}
-  | {error, already_subscribed}
+  | {error, {already_subscribed, ydb_schema()}}
 .
 
 %% @doc Adds the subscriber as a listener to the plan node.
@@ -244,7 +247,10 @@ init({Type, Args, Options}) ->
 handle_call(
     {subscribe, Subscriber}
   , _From
-  , State = #plan_node{listeners = Listeners}
+  , State = #plan_node{
+        schema = Schema
+      , listeners = Listeners
+    }
 ) when
     is_pid(Subscriber)
   ->
@@ -259,13 +265,13 @@ handle_call(
 
           , {
                 reply
-              , {ok, State#plan_node.schema}
+              , {ok, Schema}
               , State#plan_node{listeners=NewListeners}
             }
 
         % `Subscriber' is already a listener
       ; Ref when is_reference(Ref) ->
-            {reply, {error, already_subscribed}, State}
+            {reply, {error, {already_subscribed, Schema}}, State}
     end
 ;
 
@@ -375,6 +381,65 @@ handle_cast(
 ;
 
 handle_cast(
+    {publisher_pid, PublisherPid, PublisherNodeId}
+  , State0 = #plan_node{
+        publishers = Publishers0
+    }
+) ->
+    {Publishers1, Ready} = lists:mapfoldl(
+        fun (P, R) when is_pid(P) -> {P, R}
+
+          ; (P, R) ->
+            case P of
+                PublisherNodeId -> {PublisherPid, R}
+
+              ; _Else -> {P, false}
+            end
+        end
+
+      , true
+      , Publishers0
+    )
+
+  , State1 = State0#plan_node{
+        publishers=Publishers1
+    }
+
+  , case Ready of
+        true ->
+            Type = State0#plan_node.type
+          , Wrapped = State0#plan_node.wrapped
+
+          , case Type:compute_schema(
+                lists:map(
+                    fun ({_Index, PlanNode}) ->
+                        case add_listener(PlanNode, erlang:self()) of
+                            {ok, Schema} -> Schema
+
+                          ; {error, {already_subscribed, Schema}} -> Schema
+                        end
+                    end
+
+                  , Publishers1
+                )
+
+              , Wrapped
+            ) of
+                {ok, Schema} ->
+                    State2 = State1#plan_node{
+                        schema=Schema
+                    }
+
+                  , {noreply, State2}
+
+              ; {error, Reason} -> {stop, Reason, State1}
+            end
+
+      ; false -> {noreply, State1}
+    end
+;
+
+handle_cast(
     {prepare_schema, PlanNodes}
   , State = #plan_node{
         type = Type
@@ -389,21 +454,21 @@ handle_cast(
                 case add_listener(PlanNode, erlang:self()) of
                     {ok, Schema} -> Schema
 
-                  ; {error, already_subscribed} -> []
+                  ; {error, {already_subscribed, Schema}} -> Schema
                 end
 
               ; (PlanNode) when is_atom(PlanNode) ->
                 case add_listener(PlanNode, erlang:self()) of
                     {ok, Schema} -> Schema
 
-                  ; {error, already_subscribed} -> []
+                  ; {error, {already_subscribed, Schema}} -> Schema
                 end
 
               ; (PlanNode) when is_function(PlanNode, 0) ->
                 case add_listener(PlanNode(), erlang:self()) of
                     {ok, Schema} -> Schema
 
-                  ; {error, already_subscribed} -> []
+                  ; {error, {already_subscribed, Schema}} -> Schema
                 end
 
               ; ({BranchNode, BranchType})
