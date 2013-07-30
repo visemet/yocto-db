@@ -1,0 +1,9 @@
+language: erlang
+otp_release:
+   - R16B01
+   - R16B
+
+branches:
+  only:
+    - master
+    - v0.2
