@@ -2,7 +2,7 @@ yocto-db
 ========
 
 A data-stream management system.
-![Build Status](https://travis-ci.org/visemet/yocto-db.png)
+[![Build Status](https://travis-ci.org/visemet/yocto-db.png)](https://travis-ci.org/visemet/yocto-db)
 
 Build & Run
 -----------
