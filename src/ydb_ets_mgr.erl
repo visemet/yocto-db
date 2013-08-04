@@ -41,55 +41,36 @@ init({Topology}) when is_list(Topology) ->
 .
 
 handle_call(
-    {ready, NodeId}
-  , Pid
+    {ready, ReadyId}
+  , ReadyPid
   , State0 = #ets_mgr{
         topology = Topology
       , pids = Pids0
     }
 ) ->
-    Pids1 = add_pid(NodeId, Pid, Pids0)
+    Pids1 = add_ready_pid(ReadyId, ReadyPid, Pids0)
 
-  , {_Length, Result0} = lists:foldl(
-        fun (Elem, {Index0, Result0}) ->
-            Index1 = Index0 + 1
-          , Result1 = case Elem of
-                {NodeId, From} ->
-                    case dict:find(From, Pids1) of
-                        {ok, Value} -> gen_server:cast(
-                            Pid
-                          , {publisher_pid, Value, From}
-                        )
+  , Result0 = ydb_lists_ext:foldli(
+        fun (Index, Elem, Result0) ->
+            case Elem of
+                {ReadyId, From} ->
+                    on_to_is_ready(From, ReadyId, ReadyPid, Pids1)
+                  , [{Index, From}|Result0]
 
-                      ; error -> pass
-                    end
-
-                  , [{Index1, From}|Result0]
-
-              ; {To, NodeId} ->
-                    case dict:find(To, Pids1) of
-                        {ok, Value} -> gen_server:cast(
-                            Value
-                          , {publisher_pid, Pid, NodeId}
-                        )
-
-                      ; error -> pass
-                    end
-
+              ; {To, ReadyId} ->
+                    on_from_is_ready(To, ReadyId, ReadyPid, Pids1)
                   , Result0
 
               ; _Else -> Result0
             end
-
-          , {Index1, Result1}
         end
 
-      , {0, []}
+      , []
       , Topology
     )
 
   , State1 = State0#ets_mgr{
-        pids = Pids1
+        pids=Pids1
     }
 
   , Result1 = lists:reverse(Result0)
@@ -119,8 +100,30 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
-add_pid(NodeId, Pid, PidsDict) ->
-    dict:store(NodeId, Pid, PidsDict)
+add_ready_pid(ReadyId, ReadyPid, PidsDict) ->
+    dict:store(ReadyId, ReadyPid, PidsDict)
+.
+
+on_to_is_ready(FromId, _ToId, ToPid, PidsDict) ->
+    case dict:find(FromId, PidsDict) of
+        {ok, FromPid} -> gen_server:cast(
+            ToPid
+          , {publisher_pid, FromPid, FromId}
+        )
+
+      ; error -> ok
+    end
+.
+
+on_from_is_ready(ToId, FromId, FromPid, PidsDict) ->
+    case dict:find(ToId, PidsDict) of
+        {ok, ToPid} -> gen_server:cast(
+            ToPid
+          , {publisher_pid, FromPid, FromId}
+        )
+
+      ; error -> ok
+    end
 .
 
 %% ----------------------------------------------------------------- %%
