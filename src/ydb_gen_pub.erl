@@ -40,7 +40,7 @@
 
 %% ----------------------------------------------------------------- %%
 
--spec start_link(Type :: atom(), Args :: term(), Options :: list()) ->
+-spec start_link(atom(), term(), list()) ->
     {ok, Publisher :: pid()}
   | {error, Reason :: term()}
 .
@@ -188,8 +188,8 @@ handle_cast(_Request, State) -> {noreply, State}.
 
 %% ----------------------------------------------------------------- %%
 
--spec handle_info(Info :: timeout | term(), State :: ydb_gen_pub()) ->
-    {noreply, NewState :: ydb_gen_pub()}
+-spec handle_info(Info :: timeout | term(), State0 :: ydb_gen_pub()) ->
+    {noreply, State1 :: ydb_gen_pub()}
 .
 
 %% @doc Handles the info of down-ed subscribers.
@@ -214,18 +214,14 @@ handle_info(_Info, State) -> {noreply, State}.
 
 %% ----------------------------------------------------------------- %%
 
--spec terminate(Reason :: term(), State :: ydb_gen_pub()) -> ok.
+-spec terminate(term(), ydb_gen_pub()) -> ok.
 
 %% @doc Called by a gen_server when it is about to terminate. Nothing
 %%      to clean up though.
 terminate(_Reason, _State) -> ok.
 
--spec code_change(
-    OldVsn :: term()
-  , State :: ydb_gen_pub()
-  , Extra :: term()
-) ->
-    {ok, NewState :: ydb_gen_pub()}
+-spec code_change(term(), State0 :: ydb_gen_pub(), term()) ->
+    {ok, State1 :: ydb_gen_pub()}
 .
 
 %% @doc Called by a gen_server when it should update its interal state
