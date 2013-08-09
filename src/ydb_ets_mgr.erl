@@ -6,7 +6,7 @@
 -behaviour(gen_server).
 
 %% interface functions
--export([ready/2]).
+-export([ready/2, new_ets/3]).
 
 %% `gen_server' callbacks
 -export([
@@ -21,14 +21,14 @@
     topology :: [{ydb_bolt_id(), ydb_bolt_id()}]
 
   , pids=dict:new() :: dict() % ydb_bolt_id() -> pid()
-  , tids=dict:new() :: dict() % ydb_bolt_id() -> [tid()]
+  , tids=dict:new() :: dict() % ydb_bolt_id() -> [ets:tid()]
 }).
 
 -type ets_mgr() :: #ets_mgr{
     topology :: [{To :: ydb_bolt_id(), From :: ydb_bolt_id()}]
 
   , pids :: dict() % ydb_bolt_id() -> pid()
-  , tids :: dict() % ydb_bolt_id() -> [tid()]
+  , tids :: dict() % ydb_bolt_id() -> [ets:tid()]
 }.
 %% Internal ETS manager state.
 
@@ -44,6 +44,15 @@
 %%      that the message is sent from the bolt process itself.
 ready(Manager, BoltId) when is_pid(Manager) ->
     gen_server:call(Manager, {ready, BoltId})
+.
+
+-spec new_ets(pid(), [{Name :: atom(), Options :: [term()]}], ydb_bolt_id()) ->
+    Tids :: [ets:tid()]
+.
+
+%% @doc Requests potentially multiple ETS tables from the manager.
+new_ets(Manager, Config, BoltId) when is_pid(Manager), is_list(Config) ->
+    gen_server:call(Manager, {new_ets, Config, BoltId})
 .
 
 %% ----------------------------------------------------------------- %%
@@ -65,7 +74,8 @@ init({Topology}) when is_list(Topology) ->
 .
 
 %% @doc Handles the requests from the bolt processes that signal they
-%%      are ready.
+%%      are ready. Also handles the requests from the bolt processes
+%%      to create ETS tables.
 handle_call(
     {ready, ReadyId}
   , ReadyPid
@@ -99,6 +109,30 @@ handle_call(
 
   , State1 = State0#ets_mgr{pids=Pids1}
   , {reply, {ok, Result1}, State1}
+;
+
+handle_call(
+    {new_ets, Config, BoltId}
+  , From
+  , State0 = #ets_mgr{tids = Tids0}
+) ->
+    Tids = lists:map(
+        fun ({Name, Options0}) ->
+            Options1 = [{heir, erlang:self(), {}}|Options0]
+
+          , Tid = ets:new(Name, Options1)
+          , ets:give_away(Tid, From, {})
+
+          , Tid
+        end
+
+      , Config
+    )
+
+  , Tids1 = dict:store(BoltId, Tids, Tids0)
+
+  , State1 = State0#ets_mgr{tids=Tids1}
+  , {reply, {ok, Tids}, State1}
 ;
 
 handle_call(_Request, _From, State) -> {reply, ok, State}.
