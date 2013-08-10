@@ -5,7 +5,7 @@
 -extends(ydb_gen_pub).
 
 %% inteface functions
--export([]).
+-export([new_synopsis/1]).
 
 %% overrides `gen_server' callbacks
 -export([handle_cast/2]).
@@ -22,6 +22,10 @@
 %% @headerfile "ydb_tuple.hrl"
 -include("ydb_tuple.hrl").
 
+-define(ETS_NAME, synopsis).
+-define(ETS_NAME_STRING, erlang:atom_to_list(?ETS_NAME)).
+-define(ETS_OPTIONS, [duplicate_bag, protected, {keypos, 1}]).
+
 -record(gen_bolt, {
     id :: ydb_bolt_id()
 
@@ -33,12 +37,24 @@
 %%%  API                                                            %%%
 %%% =============================================================== %%%
 
+-callback receive_synopsis(Tids :: [ets:tid()], State0 :: term()) ->
+    State1 :: term()
+.
+
 -callback process_tuples(InTuples :: [ydb_tuple()], State0 :: term()) ->
     {ok, OutTuples :: [ydb_tuple()], State1 :: term()}
   | {error, Reason :: term()}
 .
 
 -callback emit_tuples(Tuples :: [ydb_tuple()], Subscribers :: [pid()]) -> ok.
+
+%% ----------------------------------------------------------------- %%
+
+-spec new_synopsis(pos_integer()) -> ok.
+
+new_synopsis(N) when is_integer(N), N > 0 ->
+    gen_server:cast(erlang:self(), {new_synopsis, N})
+.
 
 %% ----------------------------------------------------------------- %%
 
@@ -79,6 +95,26 @@ handle_cast(
 
       ; false -> {noreply, State1}
     end
+;
+
+handle_cast(
+    {new_synopsis, N}
+  , State0 = #ydb_gen_pub{
+        type = Type
+      , callback = Callback0
+      , extras = #gen_bolt{
+            id = BoltId
+          , manager = Manager
+        }
+    }
+) ->
+    Config = make_ets_config(N)
+  , Tids = ydb_ets_mgr:new_ets(Manager, Config, BoltId)
+
+  , Callback1 = Type:receive_synopsis(Tids, Callback0)
+
+  , State1 = State0#ydb_gen_pub{callback=Callback1}
+  , {noreply, State1}
 ;
 
 handle_cast(Request, State) -> ?BASE_MODULE:handle_cast(Request, State).
@@ -176,6 +212,25 @@ on_ready(State0 = #ydb_gen_pub{
 
       ; {error, Reason} -> {stop, Reason, State0}
     end
+.
+
+-spec make_ets_config(pos_integer()) ->
+    Config :: [{Name :: atom(), Options :: [term()]}]
+.
+
+%% @doc TODO
+make_ets_config(1) ->
+    [{?ETS_NAME, ?ETS_OPTIONS}]
+;
+
+make_ets_config(N) ->
+    lists:map(
+        fun (I) ->
+            {erlang:list_to_atom(?ETS_NAME_STRING ++ [I]), ?ETS_OPTIONS}
+        end
+
+      , lists:seq(1, N)
+    )
 .
 
 %% ----------------------------------------------------------------- %%
