@@ -17,27 +17,36 @@
 %% @headerfile "ydb_gen_bolt.hrl"
 -include("ydb_gen_bolt.hrl").
 
+%% @headerfile "ydb_gen_spout.hrl"
+-include("ydb_gen_spout.hrl").
+
 -record(ets_mgr, {
-    topology :: [{ydb_bolt_id(), ydb_bolt_id()}]
+    topology :: topology()
 
   , pids=dict:new() :: dict() % ydb_bolt_id() -> pid()
   , tids=dict:new() :: dict() % ydb_bolt_id() -> [ets:tid()]
 }).
 
 -type ets_mgr() :: #ets_mgr{
-    topology :: [{To :: ydb_bolt_id(), From :: ydb_bolt_id()}]
+    topology :: topology()
 
   , pids :: dict() % ydb_bolt_id() -> pid()
   , tids :: dict() % ydb_bolt_id() -> [ets:tid()]
 }.
 %% Internal ETS manager state.
 
+-type topology() :: [{To :: pub_id(), From :: pub_id()}].
+%% Topology of publisher graph.
+
+-type pub_id() :: ydb_bolt_id() | ydb_spout_id().
+%% Identifier for publisher process.
+
 %%% =============================================================== %%%
 %%%  API                                                            %%%
 %%% =============================================================== %%%
 
 -spec ready(pid(), ydb_bolt_id()) ->
-    {ok, Publishers :: [{ydb_bolt_id(), 'undefined' | pid()}]}
+    {ok, Publishers :: [{pub_id(), 'undefined' | pid()}]}
 .
 
 %% @doc Signals to the manager that the bolt process is ready. Assumes
@@ -57,7 +66,7 @@ new_ets(Manager, Config, BoltId) when is_pid(Manager), is_list(Config) ->
 
 %% ----------------------------------------------------------------- %%
 
--spec init(Args :: {[{ydb_bolt_id(), ydb_bolt_id()}]}) -> {ok, ets_mgr()}.
+-spec init(Args :: {topology()}) -> {ok, ets_mgr()}.
 
 %% @doc Initializes the internal state of the manager process.
 init({Topology}) when is_list(Topology) ->
