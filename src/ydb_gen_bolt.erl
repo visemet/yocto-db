@@ -70,13 +70,17 @@ handle_cast(
 ) ->
     MgrPid = MgrFun()
 
-  , {ok, Publishers} = ydb_ets_mgr:ready(MgrPid, BoltId)
+  , {ok, Publishers} = ydb_ets_mgr:ready(MgrPid, BoltId, erlang:self())
   , Extras = #gen_bolt{id=BoltId, manager=MgrPid, publishers=Publishers}
 
-    % TODO check if ready, in case subscribed only to spout process
-
   , State1 = State0#ydb_gen_pub{extras=Extras}
-  , {noreply, State1}
+
+    % Check if ready, in case only subscribed to spout processes
+  , case is_ready(Publishers) of
+        true -> on_ready(State1)
+
+      ; false -> {noreply, State1}
+    end
 ;
 
 handle_cast(
@@ -109,7 +113,7 @@ handle_cast(
     }
 ) ->
     Config = make_ets_config(N)
-  , Tids = ydb_ets_mgr:new_ets(Manager, Config, BoltId)
+  , Tids = ydb_ets_mgr:new_ets(Manager, Config, BoltId, erlang:self())
 
   , Callback1 = Type:receive_synopsis(Tids, Callback0)
 

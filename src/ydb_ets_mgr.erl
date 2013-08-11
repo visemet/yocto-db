@@ -6,7 +6,7 @@
 -behaviour(gen_server).
 
 %% interface functions
--export([ready/2, new_ets/3]).
+-export([ready/3, new_ets/4]).
 
 %% `gen_server' callbacks
 -export([
@@ -35,43 +35,63 @@
 }.
 %% Internal ETS manager state.
 
--type topology() :: [{To :: pub_id(), From :: pub_id()}].
-%% Topology of publisher graph.
+-type topology() :: [{Publisher :: pub_id(), Subscriber :: pub_id()}].
+%% Topology of `Publisher -> Subscriber' graph.
 
 -type pub_id() :: ydb_bolt_id() | ydb_spout_id().
 %% Identifier for publisher process.
+
+-type ets_config() :: [{Name :: atom(), Options :: [term()]}].
+%% Configuration for ETS tables.
 
 %%% =============================================================== %%%
 %%%  API                                                            %%%
 %%% =============================================================== %%%
 
--spec ready(pid(), ydb_bolt_id()) ->
+-spec ready(pid(), ydb_bolt_id(), pid()) ->
     {ok, Publishers :: [{pub_id(), 'undefined' | pid()}]}
 .
 
 %% @doc Signals to the manager that the bolt process is ready. Assumes
 %%      that the message is sent from the bolt process itself.
-ready(Manager, BoltId) when is_pid(Manager) ->
-    gen_server:call(Manager, {ready, BoltId})
+ready(Manager, BoltId, BoltPid)
+  when
+    is_pid(Manager)
+  , is_pid(BoltPid)
+  ->
+    gen_server:call(Manager, {ready, BoltId, BoltPid})
 .
 
--spec new_ets(pid(), [{Name :: atom(), Options :: [term()]}], ydb_bolt_id()) ->
+-spec new_ets(pid(), ets_config(), ydb_bolt_id(), pid()) ->
     Tids :: [ets:tid()]
 .
 
 %% @doc Requests potentially multiple ETS tables from the manager.
-new_ets(Manager, Config, BoltId) when is_pid(Manager), is_list(Config) ->
-    gen_server:call(Manager, {new_ets, Config, BoltId})
+new_ets(Manager, Config, BoltId, BoltPid)
+  when
+    is_pid(Manager)
+  , is_list(Config)
+  , is_pid(BoltPid)
+  ->
+    gen_server:call(Manager, {new_ets, Config, BoltId, BoltPid})
 .
 
 %% ----------------------------------------------------------------- %%
 
--spec init(Args :: {topology()}) -> {ok, ets_mgr()}.
+-spec init(Args :: {topology()}) ->
+    {ok, ets_mgr()}
+  | {stop, Reason :: term()}
+.
 
 %% @doc Initializes the internal state of the manager process.
 init({Topology}) when is_list(Topology) ->
-    State = #ets_mgr{topology=Topology}
-  , {ok, State}
+    case check_topology(Topology) of
+        ok ->
+            State = #ets_mgr{topology=Topology}
+          , {ok, State}
+
+      ; {error, Reason} -> {stop, Reason}
+    end
 .
 
 -spec handle_call(
@@ -86,8 +106,8 @@ init({Topology}) when is_list(Topology) ->
 %%      are ready. Also handles the requests from the bolt processes
 %%      to create ETS tables.
 handle_call(
-    {ready, ReadyId}
-  , ReadyPid
+    {ready, ReadyId, ReadyPid}
+  , _From
   , State0 = #ets_mgr{
         topology = Topology
       , pids = Pids0
@@ -97,13 +117,16 @@ handle_call(
 
   , Result0 = lists:foldl(
         fun (Elem, Result) ->
-            case Elem of
-                {ReadyId, From} ->
-                    on_to_is_ready(From, ReadyId, ReadyPid, Pids1)
-                  , [{From, undefined}|Result]
+            case {Publisher, Subscriber} = Elem of
+                {{spout, Id}, ReadyId} ->
+                    [{Publisher, erlang:whereis(Id)}|Result]
 
-              ; {To, ReadyId} ->
-                    on_from_is_ready(To, ReadyId, ReadyPid, Pids1)
+              ; {{bolt, _}, ReadyId} ->
+                    on_subscriber_ready(Publisher, ReadyPid, Pids1)
+                  , [{Publisher, undefined}|Result]
+
+              ; {ReadyId, {bolt, _}} ->
+                    on_publisher_ready(Subscriber, ReadyId, ReadyPid, Pids1)
                   , Result
 
               ; _Else -> Result
@@ -121,8 +144,8 @@ handle_call(
 ;
 
 handle_call(
-    {new_ets, Config, BoltId}
-  , From
+    {new_ets, Config, BoltId, BoltPid}
+  , _From
   , State0 = #ets_mgr{tids = Tids0}
 ) ->
     Tids = lists:map(
@@ -130,7 +153,7 @@ handle_call(
             Options1 = [{heir, erlang:self(), {}}|Options0]
 
           , Tid = ets:new(Name, Options1)
-          , ets:give_away(Tid, From, {})
+          , ets:give_away(Tid, BoltPid, {})
 
           , Tid
         end
@@ -181,6 +204,32 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %%%  private functions                                              %%%
 %%% =============================================================== %%%
 
+-spec check_topology(topology()) -> ok | {error, Reason :: term}.
+
+%% @doc Verifies that the topology is not malformed. Only allows
+%%      connections from a spout process to a bolt process, or a bolt
+%%      process to another bolt process.
+check_topology(Topology) ->
+    BadArgs = lists:filter(
+        fun (Elem) ->
+            case Elem of
+                {{spout, _}, {bolt, _}} -> false
+
+              ; {{bolt, _}, {bolt, _}} -> false
+
+              ; _Else -> true
+            end
+        end
+
+      , Topology
+    )
+
+  , if  erlang:length(BadArgs) =:= 0 -> ok
+
+      ; true -> {error, {badarg, BadArgs}}
+    end
+.
+
 -spec add_ready_pid(ydb_bolt_id(), pid(), Pids0 :: dict()) -> Pids1 :: dict().
 
 %% @doc Returns a new dictionary with the `ReadyId -> ReadyPid' entry
@@ -189,25 +238,31 @@ add_ready_pid(ReadyId, ReadyPid, Pids) ->
     dict:store(ReadyId, ReadyPid, Pids)
 .
 
--spec on_to_is_ready(ydb_bolt_id(), ydb_bolt_id(), pid(), dict()) -> ok.
+-spec on_subscriber_ready(ydb_bolt_id(), pid(), dict()) -> ok.
 
-%% @doc Handles the case where the newly-ready bolt process is on the
-%%      `To'-side of the topology.
-on_to_is_ready(FromId, _ToId, ToPid, Pids) ->
-    case dict:find(FromId, Pids) of
-        {ok, FromPid} -> gen_server:cast(ToPid, {publisher, FromId, FromPid})
+%% @doc Handles the case where the newly-ready bolt process is a
+%%      subscriber in the topology case.
+on_subscriber_ready(PublisherId, SubscriberPid, Pids) ->
+    % Check if publisher is also ready
+    case dict:find(PublisherId, Pids) of
+        {ok, PublisherPid} ->
+            Request = {publisher, PublisherId, PublisherPid}
+          , gen_server:cast(SubscriberPid, Request)
 
       ; error -> ok
     end
 .
 
--spec on_from_is_ready(ydb_bolt_id(), ydb_bolt_id(), pid(), dict()) -> ok.
+-spec on_publisher_ready(ydb_bolt_id(), ydb_bolt_id(), pid(), dict()) -> ok.
 
-%% @doc Handles the case where the newly-ready bolt process is on the
-%%      `From'-side of the topology.
-on_from_is_ready(ToId, FromId, FromPid, Pids) ->
-    case dict:find(ToId, Pids) of
-        {ok, ToPid} -> gen_server:cast(ToPid, {publisher, FromId, FromPid})
+%% @doc Handles the case where the newly-ready bolt process is a
+%%      publisher in the topology case.
+on_publisher_ready(SubscriberId, PublisherId, PublisherPid, Pids) ->
+    % Check if subscriber is also ready
+    case dict:find(SubscriberId, Pids) of
+        {ok, SubscriberPid} ->
+            Request = {publisher, PublisherId, PublisherPid}
+          , gen_server:cast(SubscriberPid, Request)
 
       ; error -> ok
     end
