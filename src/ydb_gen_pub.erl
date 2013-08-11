@@ -7,7 +7,7 @@
 %% interface functions
 -export([
     start_link/3, start_link/4, subscribe/2, unsubscribe/2
-  , emit_tuples/2
+  , emit_tuples_to/2
 ]).
 
 %% `gen_server' callbacks
@@ -90,10 +90,14 @@ unsubscribe(Publisher, Subscriber)
     gen_server:cast(Publisher, {unsubscribe, Subscriber})
 .
 
--spec emit_tuples(pid(), [ydb_tuple()]) -> ok.
+-spec emit_tuples_to(pid(), [ydb_tuple()]) -> ok.
 
 %% @doc Sends the tuples to the process.
-emit_tuples(Subscriber, Tuples) when is_pid(Subscriber), is_list(Tuples) ->
+emit_tuples_to(Subscriber, Tuples)
+  when
+    is_pid(Subscriber)
+  , is_list(Tuples)
+  ->
     % Note that this request is not handled by this module in any
     % meaningful way
     gen_server:cast(Subscriber, {tuples, Tuples})
