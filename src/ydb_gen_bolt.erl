@@ -46,7 +46,7 @@
   | {error, Reason :: term()}
 .
 
--callback emit_tuples(Tuples :: [ydb_tuple()], Subscribers :: [pid()]) -> ok.
+-callback send_tuples(Tuples :: [ydb_tuple()], Subscribers :: [pid()]) -> ok.
 
 %% ----------------------------------------------------------------- %%
 
@@ -115,6 +115,25 @@ handle_cast(
 
   , State1 = State0#ydb_gen_pub{callback=Callback1}
   , {noreply, State1}
+;
+
+handle_cast(
+    {tuples, InTuples}
+  , State0 = #ydb_gen_pub{
+        type = Type
+      , callback = Callback0
+      , subscribers = Subscribers
+    }
+) ->
+    case Type:process_tuples(InTuples, Callback0) of
+        {ok, OutTuples, Callback1} ->
+            Type:send_tuples(OutTuples, Subscribers)
+
+          , State1 = State0#ydb_gen_pub{callback=Callback1}
+          , {noreply, State1}
+
+      ; {error, Reason} -> {stop, Reason, State0}
+    end
 ;
 
 handle_cast(Request, State) -> ?BASE_MODULE:handle_cast(Request, State).

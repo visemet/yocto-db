@@ -92,11 +92,11 @@ unsubscribe(Publisher, Subscriber)
 
 -spec emit_tuples(pid(), [ydb_tuple()]) -> ok.
 
-%% @doc Sends the tuples to the subscribers of the publisher.
-emit_tuples(Publisher, Tuples) when is_pid(Publisher), is_list(Tuples) ->
+%% @doc Sends the tuples to the process.
+emit_tuples(Subscriber, Tuples) when is_pid(Subscriber), is_list(Tuples) ->
     % Note that this request is not handled by this module in any
     % meaningful way
-    gen_server:cast(Publisher, {tuples, Tuples})
+    gen_server:cast(Subscriber, {tuples, Tuples})
 .
 
 %% ----------------------------------------------------------------- %%
